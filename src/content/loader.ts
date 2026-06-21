@@ -13,16 +13,20 @@ import { validateResidents, validateEconomyTunables } from './residents-validate
 import { RESIDENTS, ECONOMY_TUNABLES } from './residents';
 import { validateScoringBalance } from './scoring-validate';
 import { scoringBalance } from './scoring';
+import { validateIncidentCatalog, validateSchedulerTunables } from './incidents-validate';
+import { INCIDENTS, schedulerTunables } from './incidents';
 import type { AssetManifest } from './assets';
 import type { MeterBalance } from './meters';
 import type { ResidentDef, EconomyTunables } from './residents';
 import type { ScoringBalance } from './scoring';
+import type { IncidentDef, SchedulerTunables } from './incidents';
 
 export interface Content {
   manifest: AssetManifest;
   meters: MeterBalance; // area 02 balance table
   economy: { roster: ResidentDef[]; tunables: EconomyTunables }; // area 03
   scoring: ScoringBalance; // area 04
+  incidents: { catalog: IncidentDef[]; scheduler: SchedulerTunables }; // area 05
 }
 
 export function loadContent(raw: unknown): Content {
@@ -37,5 +41,9 @@ export function loadContent(raw: unknown): Content {
     tunables: validateEconomyTunables(ECONOMY_TUNABLES),
   };
   const scoring = validateScoringBalance(scoringBalance);
-  return { manifest, meters, economy, scoring };
+  const incidents = {
+    catalog: validateIncidentCatalog(INCIDENTS),
+    scheduler: validateSchedulerTunables(schedulerTunables),
+  };
+  return { manifest, meters, economy, scoring, incidents };
 }

@@ -29,6 +29,9 @@ export interface GameEvents {
   // Meters area on poo-crisis ENTRY; Scoring/Economy may react (penalty / reputation hit). Carries
   // no payload — the magnitudes live in their respective balance tables.
   pooAccident: Record<string, never>;
+  // One-shot penalty when a `crisisOnExpiry` incident (e.g. an unpaid inspection) lapses unresolved
+  // (docs/areas/05-random-incidents.md §3.2). Economy/Scoring react; additive, lead-approved.
+  incidentPenalty: { id: string };
   // Extends the architecture §5 baseline ({score, cause}) with the run stats the persistence
   // layer needs to build a RunSummary on game over (Gameplay Engine, area 01, supplies them).
   gameOver: { score: number; cause: string; shiftSeconds: number; dronesDowned: number };
