@@ -40,7 +40,7 @@ never touches `localStorage` directly.
 1. **Table size:** keep the top **N = 10** entries. `MAX_NAME_LEN = 12`,
    `MIN_NAME_LEN = 1`. Default initials placeholder: `AAA`.
 2. **Ordering:** sort by `score` descending. **Tie-break** (deterministic, stable):
-   higher `score` → longer `shiftLengthSeconds` → more `dronesDowned` → earlier
+   higher `score` → longer `shiftSeconds` → more `dronesDowned` → earlier
    `dateISO` (older run keeps the higher rank on a full tie). Never rely on insertion
    order alone; the comparator must fully order entries.
 3. **Qualification:** a finished run **qualifies** if the table has fewer than `N`
@@ -84,15 +84,10 @@ never touches `localStorage` directly.
 ## 4. Public interface (TypeScript)
 
 ```ts
-// src/ui/highscores/types.ts
-export interface HighscoreEntry {
-  name: string;              // validated, MIN..MAX_NAME_LEN, allowed glyphs
-  score: number;             // pinball score (NOT rubles)
-  shiftLengthSeconds: number;
-  dronesDowned: number;
-  dateISO: string;           // ISO-8601 UTC; produced at game over, passed in (not via Date.now() in logic)
-  notable?: string;          // short pre-rendered highlight, e.g. "12x combo"
-}
+// HighscoreEntry's SINGLE SOURCE OF TRUTH is src/persistence/schemas.ts (area 09); import it
+// rather than redeclaring. Reconciled shape — note `shiftSeconds` (not `shiftLengthSeconds`):
+//   { name; score; shiftSeconds; dronesDowned; dateISO; notable? }
+import type { HighscoreEntry } from '../../persistence/schemas';
 
 export const HIGHSCORE_CAP = 10;
 export const MIN_NAME_LEN = 1;
@@ -114,8 +109,8 @@ export const DEFAULT_TABLE: HighscoreEntry[];         // seed data
 // src/ui/highscores/list-scene.ts    → HighscoresListScene({ highlightRank? })
 ```
 
-The scenes receive the persistence repo (below) via `SystemContext`/scene props —
-injected, never imported as a singleton, so tests can pass a fake.
+The scenes receive the persistence repo (below) via **scene-factory closures** — injected at
+registration, never on `SystemContext` and never a singleton, so tests can pass a fake.
 
 ## 5. Data / content tables
 
@@ -131,10 +126,16 @@ This area performs **no** raw storage. It consumes the repo exposed by **State &
 Persistence (09)**:
 
 ```ts
-export interface HighscoreRepo {
-  load(): HighscoreEntry[];          // returns sorted top-N, seeded with DEFAULT_TABLE if empty
-  save(table: HighscoreEntry[]): void;
+// Reconciled with State & Persistence (09): this area consumes 09's `HighscoresRepo`.
+export interface HighscoresRepo {
+  list(): HighscoreEntry[];            // sorted desc, capped at HIGHSCORE_CAP, seeded if empty
+  qualifies(score: number): boolean;
+  rankFor(score: number): number;      // 1-based, or HIGHSCORE_CAP + 1 if it wouldn't place
+  add(entry: HighscoreEntry): { rank: number };
+  clear(): void;
 }
+// Phase 5 may refactor 09's repo to DELEGATE qualifies/rankFor/sort to this area's pure
+// `table.ts`; the seed `DEFAULT_TABLE` remains this area's content.
 ```
 
 The repo handles `localStorage` keys, JSON, schema version, and migrations.
@@ -143,8 +144,8 @@ belongs in area 09.
 
 ## 7. Dependencies & integration
 
-- **Consumes event:** `gameOver { score, cause }` (plus a fuller run payload from the
-  scene machine: shift length, drones downed, notable stat).
+- **Consumes event:** `gameOver { score, cause, shiftSeconds, dronesDowned }` (run stats are
+  carried on the event; the `notable` stat is assembled from `GameState` at game over).
 - **Emits:** none required; may emit a UI navigation intent handled by the
   SceneManager.
 - **Injected ctx:** `HighscoreRepo` (from 09); render primitives from HUD/UI (10);

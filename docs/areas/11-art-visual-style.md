@@ -262,9 +262,9 @@ export interface ResolvedSprite {
 ## 6. Persistence
 
 **None** written by this area. It **consumes** two accessibility flags owned by the
-Settings/Persistence area: `reducedFlashing` (disables crisis/flicker blinking) and
-`reducedMotion` (shortens/removes non-essential tweens). If those flags are absent,
-default to flashing/motion **on**.
+Settings/Persistence area (`Settings.accessibility`, 09 §5): `reducedFlash` (disables
+crisis/flicker blinking) and `reducedMotion` (shortens/removes non-essential tweens). If those
+flags are absent, default to flashing/motion **on**.
 
 ## 7. Dependencies & integration
 
@@ -347,5 +347,5 @@ On top of the global DoD (architecture.md §9):
   ramps compete for the 32 slots. May need to share ramps (test enforces the cap).
 - **Atlas growth:** one 512×512 sheet may not hold portraits for a large resident
   roster; v2 manifest allows multiple atlas images.
-- **Reduced-motion semantics:** need Settings area to finalize the flag names; we
-  assume `reducedFlashing` / `reducedMotion`.
+- **Reduced-motion semantics — RESOLVED:** the persisted accessibility flags are
+  `reducedFlash` / `reducedMotion` (`Settings.accessibility`, docs/areas/09 §5).

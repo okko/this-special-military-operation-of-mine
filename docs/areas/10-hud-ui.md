@@ -190,7 +190,7 @@ import type { SystemContext } from '../state/system-context';
 import type { InputEvent } from '../core/input';
 
 export interface SettingsView {
-  reducedFlashing: boolean;
+  reducedFlash: boolean; // mirrors Settings.accessibility.reducedFlash (09 §5)
   largeHudText: boolean;
   pauseWhilePanelOpen: boolean;
   residentPanelKey: string; // default 'KeyE'
@@ -307,7 +307,7 @@ pass and `npm run check` (tsc + eslint + vitest) must be green per architecture.
 8. **Post integrity** — bar reflects `combat.postIntegrity` and shakes on
    `droneEscaped`; color shifts as it falls.
 9. **Crisis flasher** — `meterCrisis{entered:true}` activates the flasher on the
-   named meter; with `reducedFlashing` on it uses a steady highlight (no strobe);
+   named meter; with `reducedFlash` on it uses a steady highlight (no strobe);
    `entered:false` clears it.
 10. **Incident banner** — hidden initially; shows the incident's announcement text
     between `incidentStart` and `incidentEnd`; correct text for a given incident id;

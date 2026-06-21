@@ -129,7 +129,9 @@ export interface GameEvents {
   incidentEnd:    { id: string };
   scoreChanged:   { delta: number; total: number; reason: string };
   comboChanged:   { multiplier: number };
-  gameOver:       { score: number; cause: string };
+  // Extends the original {score, cause} with the run stats the persistence layer needs to build
+  // a RunSummary on game over (supplied by the Gameplay Engine). Lead-approved payload extension.
+  gameOver:       { score: number; cause: string; shiftSeconds: number; dronesDowned: number };
 }
 ```
 
@@ -145,9 +147,12 @@ MainMenu → Highscores → MainMenu
 MainMenu → Credits → MainMenu        (and optionally GameOver/Highscores → Credits)
 ```
 
-Each scene implements `{ enter(), update(dt, ctx), render(r), exit(), onInput(e) }`.
-The Gameplay Engine owns the `Playing` scene; UI areas own menu/highscore/settings
-scenes. The lead owns the `SceneManager` skeleton in `state/`.
+Each scene implements `{ enter(params, ctx), update(dt, ctx), render(r), onInput(e), exit() }`
+— scenes read the fixed-timestep interpolation factor from `renderer.alpha` (a field on
+`Renderer`, not a `render()` argument). The Gameplay Engine owns the `Playing` scene; UI areas
+own menu/highscore/settings scenes. The lead owns the `Scene` / `SceneManager` / `Renderer`
+contracts (in `state/` and `render/`); **State & Persistence (09) implements the `SceneManager`
+FSM** (transition graph, overlays, lifecycle).
 
 ## 7. Testing strategy (mandatory for every area)
 

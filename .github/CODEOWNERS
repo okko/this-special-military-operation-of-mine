@@ -1,0 +1,20 @@
+# Code ownership for review gates (docs/testing.md §9). The quality gates — tests, thresholds,
+# lint config, and the area docs — cannot be loosened without the owner's review.
+#
+# NOTE: CODEOWNERS only ENFORCES once "Require review from Code Owners" branch protection is
+# enabled in the repo settings (an admin action outside this file).
+
+# Default owner for everything.
+*                       @okko
+
+# Un-gameable gate infrastructure (changing these must be reviewed deliberately).
+*.test.ts               @okko
+/tests/                 @okko
+/vitest.config.ts       @okko
+/stryker.conf.json      @okko
+/eslint.config.js       @okko
+/playwright.config.ts   @okko
+/.github/               @okko
+
+# Planning + foundation docs.
+/docs/                  @okko

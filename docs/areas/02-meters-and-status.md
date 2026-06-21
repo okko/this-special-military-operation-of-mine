@@ -156,7 +156,7 @@ injected RNG, so it stays deterministic and testable.
 **Compound-crisis / game-over rule (proposed, exact):**
 - `GRACE_SECONDS = 12`.
 - Track `activeCrises = count of meters currently in crisis`.
-- **Game over** (emit `gameOver { score, cause }`, transition handled by state
+- **Game over** (emit `gameOver { score, cause, shiftSeconds, dronesDowned }`, transition handled by state
   machine) when **either**:
   1. `activeCrises >= 2` **for a continuous `compoundGrace = 4` seconds**, OR
   2. any single meter's `crisisTimer >= GRACE_SECONDS`.
@@ -255,7 +255,7 @@ Persistence (this area exposes the values).
   `incidents.flags.pipeFailure`.
 - **Injected ctx:** `rng` (for nothing required here — micro-sleep RNG lives in
   Gameplay Engine), `events`, `content`.
-- **Emits:** `meterCrisis { meter, entered }`, `gameOver { score, cause }`, plus a
+- **Emits:** `meterCrisis { meter, entered }`, `gameOver { score, cause, shiftSeconds, dronesDowned }`, plus a
   `pooAccident { }` style hook on poo-crisis entry (final event name confirmed with
   Scoring/Economy).
 - **Consumed by:** Gameplay Engine (effects → aim/move/microsleep), HUD & Render

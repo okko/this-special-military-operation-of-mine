@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: '0 3 * * *' # nightly mutation run
+
+jobs:
+  # Fast gate: typecheck + lint + tests-with-coverage, plus the backstops.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Focused/disabled-test backstop (in case lint is bypassed)
+        run: |
+          if grep -rnE "\.(only|skip)\(|\b(fdescribe|fit|xit|xdescribe)\b" --include="*.test.ts" src tests; then
+            echo "::error::Found focused/disabled tests"; exit 1;
+          fi
+      - run: npm run content-lint
+
+  # Cross-browser matrix (docs/compatibility.md §8). Phase 1 runs the boot smoke on all engines;
+  # the rest of the suite is scaffolded as test.fixme until those features land.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps
+      - run: npm run test:e2e
+
+  # Mutation testing (docs/testing.md §5). Advisory in Phase 1 (continue-on-error); runs on PRs
+  # and nightly, off the fast path. Ratchet a break threshold upward as logic areas land.
+  mutation:
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:mutation

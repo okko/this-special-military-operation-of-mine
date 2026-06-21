@@ -1,0 +1,42 @@
+{
+  "name": "one-ruble-per-drone",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A bright 16-bit retro game with a grim, satirical anti-war premise. Built in TypeScript + Vite + Canvas 2D.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "check": "tsc --noEmit && eslint . && vitest run",
+    "test:e2e": "playwright test",
+    "test:mutation": "stryker run",
+    "content-lint": "node scripts/content-lint.mjs",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@eslint-community/eslint-plugin-eslint-comments": "^4.4.1",
+    "@eslint/js": "^9.17.0",
+    "@playwright/test": "^1.49.1",
+    "@stryker-mutator/core": "^8.7.1",
+    "@stryker-mutator/typescript-checker": "^8.7.1",
+    "@stryker-mutator/vitest-runner": "^8.7.1",
+    "@types/node": "^22.10.5",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-vitest": "^0.5.4",
+    "globals": "^15.14.0",
+    "husky": "^9.1.7",
+    "jsdom": "^25.0.1",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.19.0",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  }
+}

@@ -88,12 +88,13 @@ loop(now):
   while accumulator >= FIXED_DT:
     scene.update(FIXED_DT, ctx)     // deterministic, dt is constant
     accumulator -= FIXED_DT
-  alpha = accumulator / FIXED_DT     // 0..1 interpolation factor
-  scene.render(renderer, alpha)
+  renderer.alpha = accumulator / FIXED_DT   // 0..1 interpolation factor, carried on the renderer
+  manager.render(renderer)                  // scenes read `renderer.alpha`; see §3.10 + Renderer
   requestAnimationFrame(loop)
 ```
 - Logic only ever sees `FIXED_DT`. Frame-rate independence and determinism follow.
-- `alpha` lets the renderer interpolate entity positions between logic ticks.
+- `renderer.alpha` lets the renderer interpolate entity positions between logic ticks. It is a
+  **field on `Renderer`**, not a `render()` parameter — so `Scene.render(r)` and the loop agree.
 - Pause stops calling `update` but may keep rendering.
 
 ### 3.3 RNG (core/rng)
@@ -164,10 +165,12 @@ loop(now):
   callout.
 
 ### 3.10 Scene manager & GameState skeletons
-- `SceneManager` runs the FSM in `architecture.md` §6; validates transitions; calls
-  `enter/exit/update/render/onInput`.
-- `GameState` skeleton per `architecture.md` §4. These are **lead-owned**; other
-  areas refine only their own slice.
+- This area **publishes the lead-owned contracts** — `Scene<P>`, `SceneId`, `SceneManager`,
+  `Renderer`, and the `GameState` skeleton (`architecture.md` §4) — plus a trivial `Boot`
+  placeholder scene. **State & Persistence (09) implements the `SceneManager` FSM** (transition
+  graph, overlays, lifecycle, `enter/exit/update/render/routeInput` dispatch); this area does not
+  duplicate that logic.
+- These contracts are **lead-owned**; other areas refine only their own `GameState` slice.
 
 ### 3.11 Content loader
 - Loads typed data tables from `src/content`, runs a validation pass, and fails
@@ -236,13 +239,28 @@ export type InputEvent =
   | { type: 'fireDown' } | { type: 'fireUp' }
   | { type: 'key'; code: string; down: boolean }
   | { type: 'pointer'; world: Vec2; down: boolean };
-export interface Input { isDown(code: string): boolean; }
+export interface Input { isDown(code: string): boolean; dispose(): void; }
 
-// state/scene-manager.ts
-export interface Scene {
-  enter(ctx: SystemContext): void;
-  update(dt: number, ctx: SystemContext): void;
-  render(r: Renderer, alpha: number): void;
+// render/renderer.ts  (LEAD-OWNED — the drawing surface every Scene.render receives; the concrete
+// Canvas implementation is Core/Render's. DrawOpts/TextOpts also live here. `alpha` is a FIELD,
+// not a render() parameter, which is what lets Scene.render(r) and the loop agree.)
+export interface Renderer {
+  readonly width: 384; readonly height: 216;
+  readonly alpha: number;            // fixed-timestep interpolation factor 0..1 (set by the loop)
+  clear(color?: PaletteKey): void;
+  drawSprite(id: SpriteId, pos: Vec2, opts?: DrawOpts): void;
+  fillRect(x: number, y: number, w: number, h: number, color: PaletteKey): void;
+  text(str: string, x: number, y: number, opts?: TextOpts): void;
+}
+
+// state/scene.ts + state/scene-manager.ts
+// CANONICAL contract — reconciled to State & Persistence (09), which IMPLEMENTS the FSM. Scenes
+// (and any repos they need) are supplied to register() via FACTORY closures; repos are NOT placed
+// on SystemContext (that Core type stays free of the persistence layer).
+export interface Scene<P = void> {
+  enter(params: P, ctx: SystemContext): void;   // typed transition params (see 09's SceneParams)
+  update(dt: number, ctx: SystemContext): void; // not called while frozen beneath an overlay
+  render(r: Renderer): void;                     // read r.alpha to interpolate
   onInput(e: InputEvent): void;
   exit(): void;
 }
@@ -250,10 +268,16 @@ export type SceneId =
   | 'Boot' | 'MainMenu' | 'Playing' | 'Paused'
   | 'GameOver' | 'HighscoreEntry' | 'Highscores' | 'Settings';
 export interface SceneManager {
-  register(id: SceneId, scene: Scene): void;
-  transition(to: SceneId): void;     // validates against allowed FSM edges
-  current(): SceneId;
+  register<P>(id: SceneId, factory: () => Scene<P>): void;  // FACTORY → fresh scene per entry
+  transition<P>(to: SceneId, params?: P): void;             // validates against the FSM edges
+  pushOverlay<P>(to: SceneId, params?: P): void;            // Pause/modal — does not exit active
+  popOverlay(): void;
+  readonly active: SceneId; readonly overlay: SceneId | null;
+  update(dt: number, ctx: SystemContext): void;
+  render(r: Renderer): void;
+  routeInput(e: InputEvent): void;
 }
+export function createSceneManager(ctx: SystemContext, initial?: SceneId): SceneManager;
 
 // content/loader.ts
 export function loadContent(raw: unknown): Content;   // throws on invalid data
@@ -302,8 +326,10 @@ check` (typecheck + lint + `vitest run`) must be green (architecture §7).
    letterbox); `screenToWorld`∘`worldToScreen` is identity within rounding; mapping
    respects letterbox offset and is computed from a rect origin + `clientX/Y` (not
    `offsetX/Y`); portrait viewport yields the "rotate" state.
-6. **Scene transitions:** allowed FSM edges succeed; disallowed transitions are
-   rejected/throw; `enter`/`exit` fire in the right order.
+6. **Scene contract & `Boot` placeholder:** the `Scene`/`SceneManager`/`Renderer` types compile
+   and the `Boot` placeholder's lifecycle methods are callable. (The FSM transition tests — legal/
+   illegal edges, lifecycle order, overlays — are owned by **State & Persistence (09)**, which
+   implements the manager.)
 7. **Content loader:** valid tables load; malformed tables (missing field, wrong
    type, out-of-range) fail loudly with a clear error; loader output is the typed
    `Content`.
