@@ -8,17 +8,30 @@ import type { MeterKey } from '../types/meter-key';
 
 export interface GameEvents {
   droneSpawned: { id: number; kind: string };
-  droneDestroyed: { id: number; kind: string; byPlayer: boolean; pos: Vec2 };
+  // `colorTag` (optional) marks a "special" coloured drone for the Scoring jackpot sequence
+  // (docs/areas/04-scoring.md §3.3); ordinary drones omit it. Additive, lead-approved.
+  droneDestroyed: { id: number; kind: string; byPlayer: boolean; pos: Vec2; colorTag?: string };
   droneEscaped: { id: number; damage: number }; // hit the building
   shotFired: { from: Vec2; angle: number };
+  // Opens the Scoring skill-shot window at the start of a wave (docs/areas/04-scoring.md §3.5).
+  waveStarted: Record<string, never>;
   rublesChanged: { delta: number; total: number };
   meterCrisis: { meter: MeterKey; entered: boolean };
   serviceBought: { residentId: string; service: string; cost: number };
   favorBegged: { residentId: string; favor: string; consequence: string };
   incidentStart: { id: string };
-  incidentEnd: { id: string };
+  // Area 05 (Random Incidents) lead-approved extension: `survived` lets Scoring award the
+  // incident-survival bonus only on a clean completion (docs/areas/05-random-incidents.md §4).
+  incidentEnd: { id: string; survived: boolean };
   scoreChanged: { delta: number; total: number; reason: string };
   comboChanged: { multiplier: number };
+  // Poo-crisis "accident" spectacle hook (docs/areas/02-meters-and-status.md §3.4). Emitted by the
+  // Meters area on poo-crisis ENTRY; Scoring/Economy may react (penalty / reputation hit). Carries
+  // no payload — the magnitudes live in their respective balance tables.
+  pooAccident: Record<string, never>;
+  // One-shot penalty when a `crisisOnExpiry` incident (e.g. an unpaid inspection) lapses unresolved
+  // (docs/areas/05-random-incidents.md §3.2). Economy/Scoring react; additive, lead-approved.
+  incidentPenalty: { id: string };
   // Extends the architecture §5 baseline ({score, cause}) with the run stats the persistence
   // layer needs to build a RunSummary on game over (Gameplay Engine, area 01, supplies them).
   gameOver: { score: number; cause: string; shiftSeconds: number; dronesDowned: number };

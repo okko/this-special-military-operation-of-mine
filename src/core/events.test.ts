@@ -62,7 +62,7 @@ describe('createEventBus', () => {
       throw new Error('boom');
     });
     bus.on('incidentEnd', after);
-    bus.emit('incidentEnd', { id: 'x' });
+    bus.emit('incidentEnd', { id: 'x', survived: true });
     expect(after).toHaveBeenCalledOnce();
     expect(errSpy).toHaveBeenCalled();
     errSpy.mockRestore();
