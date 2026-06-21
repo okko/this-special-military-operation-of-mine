@@ -171,7 +171,8 @@ the renderer `r` passed to `render`.
 
 ## 8. Required automated tests (MUST pass)
 
-Vitest under `jsdom`. All must pass per architecture.md §7 (`npm run check` green).
+Vitest under `jsdom`. All must pass in CI per `testing.md` (`npm run check` + the
+Playwright matrix green; no gate-gaming shortcuts).
 
 1. **Renders all options.** `render()` (against a fake canvas/text-capture renderer)
    produces all five expected option labels in order.
@@ -209,8 +210,11 @@ in-memory `SettingsRepo`/`HighscoreRepo` — no real timers, audio, or `localSto
       side-effecting the menu.
 - [ ] Menu music and navigation SFX trigger through the Audio API.
 - [ ] Menu honors persisted volume/mute and reduced-motion settings.
-- [ ] All required tests authored and passing; `npm run check` green; no `any` w/o
-      justification (global DoD, architecture.md §9).
+- [ ] Satisfies its `compatibility.md §9` row: pointer + keyboard navigable, readable
+      and tappable at mobile scale within the safe-area insets; covered by the
+      Playwright matrix.
+- [ ] All required tests authored and passing in CI; `npm run check` green; no `any`
+      w/o justification (global DoD, architecture.md §9; `testing.md`).
 
 ## 10. Open questions / risks
 

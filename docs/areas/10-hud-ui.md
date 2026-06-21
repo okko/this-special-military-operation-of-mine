@@ -35,7 +35,8 @@ scaler like everything else.
 - Score/combo math → **Scoring**. Drone/post simulation and the `Playing` scene
   lifecycle → **Gameplay Engine**.
 - Menus outside a run (title, settings, highscores) → **Main Menu** / **Highscores**.
-- Palette, fonts, sprites, emoji glyph rendering → **Art & Visual Style**.
+- Palette, fonts, sprites (incl. the five need-icon sprites + glyph fallback) →
+  **Art & Visual Style**.
 - The localStorage schema for settings → **State & Persistence**.
 
 ## 3. Requirements & mechanics
@@ -71,9 +72,10 @@ side panel (see §3.5); the meters and sky stay visible behind/around it.
 ### 3.2 The five meter widgets
 
 - One compact widget per meter, stacked top-left in fixed order: **😴 Sleep, 🍞
-  Hunger, 💧 Thirst, 🚬 Vice, 💩 Poo**. The **poo meter MUST use the literal poo
-  emoji `💩`** as its indicator (hard requirement from the brief).
-- Each widget = `[emoji glyph][horizontal bar]`. The bar **fills toward danger**
+  Hunger, 💧 Thirst, 🚬 Vice, 💩 Poo**. The poo meter's indicator **must clearly read
+  as the poo emoji 💩** — implemented as a pixel-art sprite like the other four icons
+  (it need not be the literal system emoji; `compatibility.md §2`).
+- Each widget = `[icon sprite][horizontal bar]`. The bar **fills toward danger**
   (0 = empty/safe, 100 = full/crisis), matching the meters convention (0 safe → 100
   crisis). Fill width is proportional to the meter value.
 - **Color state is read from the Meters slice**, not recomputed here: fill is
@@ -134,6 +136,11 @@ flags, and greys an entry only if the selector marks it with a `disabledReason`.
 
 **Opening / closing.** Opened with a single bound key — default **`E`** ("Intercom"),
 rebindable via Settings. Pressing it again, `Esc`, or selecting *Close* dismisses it.
+**On touch** there is no keyboard, so the HUD also renders an **on-screen intercom
+button** (a tappable corner widget) that toggles the panel; in-panel navigation/confirm
+is pointer-driven. All interactive HUD hit-areas (intercom button, panel rows, close)
+must meet a **minimum tap-target size** and sit **inside the safe-area insets** so the
+notch/home indicator never covers them (`compatibility.md §3/§9`).
 
 **Real-time, not paused (default).** While the panel is open **the action
 continues** — drones keep coming and meters keep draining. This is deliberate and
@@ -242,7 +249,8 @@ export interface MenuOption {
 The HUD owns only presentation constants (no gameplay data):
 
 - **Meter indicator map** — fixed glyphs: `sleep→😴, hunger→🍞, thirst→💧, vice→🚬,
-  poo→💩`. The poo entry is a hard-locked `💩`.
+  poo→💩`. Each maps to a pixel-art icon sprite (from Art); the poo entry's icon reads
+  as `💩`. All five are rendered identically — no canvas emoji.
 - **HUD theme constants** — widget positions/sizes for 384×216, bar dimensions,
   animation durations (ruble pop, score roll, combo pulse, banner slide), toast
   duration. Colors are **referenced from the Art palette** (warn-amber, crisis-red,
@@ -284,8 +292,9 @@ pass and `npm run check` (tsc + eslint + vitest) must be green per architecture.
 2. **Meter color states** — a meter below `warn` renders green; between `warn` and
    `crisis` renders amber; at crisis renders red. Colors come from the Meters/Art
    inputs, asserted via the captured draw calls.
-3. **Poo emoji present** — the poo widget's indicator glyph is exactly `💩` (and the
-   other four glyphs are 😴/🍞/💧/🚬).
+3. **Poo indicator present** — the poo widget resolves to the poo icon (the sprite
+   depicting `💩`) and the other four to 😴/🍞/💧/🚬; the indicator map is exactly
+   these five.
 4. **Ruble display + pop** — display equals `player.rubles`; a `rublesChanged{+1}`
    event triggers the `+1` pop animation and updates the shown value; a negative
    delta flashes and floats `-n`.
@@ -315,18 +324,26 @@ pass and `npm run check` (tsc + eslint + vitest) must be green per architecture.
 13. **Input routing & open/close** — the bound key opens the panel; while open,
     `onInput` returns `true` (consumes nav/confirm) and up/down/confirm move
     selection; while closed, `onInput` returns `false` so input passes to the gun.
+    **Touch:** a tap on the on-screen intercom button toggles the panel; the button
+    and panel hit-areas meet the minimum tap size and respect safe-area insets.
 14. **Live vs. pause** — with default settings, opening the panel does not request a
     pause (`wantsPause() === false`); with `pauseWhilePanelOpen` set, opening it
     makes `wantsPause()` return `true`.
 15. **Confirmation toast** — `serviceBought` / `favorBegged` shows a toast with the
     resident/outcome text for its duration then dismisses.
+16. **Icon-row snapshot (Playwright, per engine, `compatibility.md §2/§8`)** — the
+    five meter icons (😴🍞💧🚬💩, all pixel-art sprites) match the committed screenshot
+    on Chromium / WebKit / Firefox.
 
 ## 9. Acceptance criteria / Definition of done
 
 On top of the global DoD (architecture.md §9):
 
-- [ ] All HUD widgets in §3 render correctly at 384×216 and integer-scale cleanly.
-- [ ] The poo meter uses the literal `💩` emoji.
+- [ ] All HUD widgets in §3 render correctly at 384×216 and integer-scale cleanly,
+      with interactive elements inside safe-area insets and at the minimum tap size.
+- [ ] The poo meter's icon clearly reads as 💩 and is a pixel-art sprite authored like
+      the other four meter icons (all five are atlas sprites; `compatibility.md §2`).
+- [ ] The touch on-screen intercom button opens/closes the resident panel.
 - [ ] Meter colors/thresholds, score/combo, rubles/debt, and post integrity are all
       driven by `GameState` (never recomputed in the HUD), with events used only for
       animation transitions.
@@ -335,15 +352,17 @@ On top of the global DoD (architecture.md §9):
 - [ ] Real-time-by-default behavior works; the pause-on-panel and reduced-flashing
       accessibility settings are honored.
 - [ ] Incident banner and crisis flashers respond to the correct events.
-- [ ] All tests in §8 pass; `tsc --noEmit`, ESLint, and `vitest run` are green.
+- [ ] All tests in §8 pass; `tsc --noEmit`, ESLint, and `vitest run` are green, and
+      the per-engine glyph-row snapshot passes in the Playwright matrix (`testing.md`).
 
 ## 10. Open questions / risks
 
-- **Emoji on canvas**: rendering 😴🍞💧🚬💩 crisply at 384×216 across browsers needs
-  the approach defined by the Art area (native canvas emoji vs. pre-rendered emoji
-  sprites baked into the atlas). Pre-baked sprites are likely needed for pixel-
-  consistent retro look — confirm with Art and fall back to a sprite if native
-  glyphs render inconsistently.
+- **Emoji on canvas — DECIDED (per `11-art-visual-style.md §3.4`):** all five meter
+  indicators (😴🍞💧🚬💩) are **pixel-art atlas sprites** — no canvas `fillText` emoji
+  (color-emoji blurs at 384×216 and differs per OS). The poo icon is a sprite **designed
+  to read as 💩**; the brief only requires it to look like the poo emoji, not be the
+  literal glyph. All five are pixel-consistent across engines and a per-engine Playwright
+  snapshot guards them together (`compatibility.md §2`).
 - **Real-time panel fairness**: if the live panel proves too punishing in
   playtests, consider a brief slow-mo (rather than full pause) while open — coordinate
   the lever with Gameplay Engine/Meters before changing the default.

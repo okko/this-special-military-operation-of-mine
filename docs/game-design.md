@@ -86,7 +86,9 @@ Notes:
   reduction. **Vodka** gives a large reduction *and* soothes sleep deprivation, but
   temporarily impairs aim (drunk) — risk/reward. This is the "smoke or get drunk"
   need from the brief.
-- The 💩 indicator **must literally be the poo emoji** in the HUD.
+- The 💩 indicator **must clearly read as the poo emoji** in the HUD. It need not be
+  the literal system emoji glyph — a pixel-art icon that looks like 💩, authored and
+  rendered like the other meter icons, satisfies this.
 - **Crisis behavior:** when a meter reaches 100 it enters a crisis with a grace
   timer. Resolving the need clears it. If a meter stays in crisis past its grace
   timer, or if **two or more meters are simultaneously in crisis**, the run trends

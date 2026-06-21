@@ -177,8 +177,8 @@ area does not write to `localStorage`.
 
 ## 8. Required automated tests (MUST pass)
 
-All tests deterministic (seeded RNG, injected `dt`); `npm run check` green per
-architecture.md §7.
+All tests deterministic (seeded RNG, injected `dt`); must pass in CI (`npm run check`
+green; no gate-gaming shortcuts) per `testing.md`.
 
 1. **Combo increments** on consecutive `droneDestroyed{byPlayer:true}`.
 2. **Combo resets on miss** — `droneEscaped` resets combo to 0 and steps multiplier
@@ -218,7 +218,9 @@ Target ≥ 85% line coverage for `systems/scoring.ts` and the balance validator.
       all behave per §3.
 - [ ] `scoreChanged` / `comboChanged` emitted correctly; HUD and Highscores can rely
       on them.
-- [ ] All required tests authored and passing; `npm run check` green.
+- [ ] All required tests authored and passing in CI; `npm run check` green; ≥85%
+      coverage on **lines/branches/functions** + the **mutation** threshold
+      (`testing.md §5`) — combo/multiplier/jackpot math is prime shallow-test territory.
 - [ ] Public API documented per architecture.md §9.
 
 ## 10. Open questions / risks

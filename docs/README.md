@@ -17,6 +17,8 @@ area doc.
 | [`game-design.md`](game-design.md) | Game Design Document — premise, tone, the five need meters (incl. 💩), economy of services & favors, random incidents, pinball scoring, failure/game-over, persistence. |
 | [`architecture.md`](architecture.md) | Tech stack (TypeScript + Vite + Canvas 2D + Vitest), project structure, the shared `GameState`/event-bus/scene contracts, the **testing strategy (all tests must pass)**, ownership rules, and the area-doc template every area below follows. |
 | [`compliance.md`](compliance.md) | **Mandatory** respect & anti-stereotype policy — who we may mock (the regime/war/military-institution) and who we must never ridicule (ordinary Russian people). |
+| [`testing.md`](testing.md) | **Mandatory** test strategy & quality gates — built **by AI**, so the gates are un-gameable and CI-enforced (coverage on lines/branches/functions, mutation testing, determinism golden, no focused/skipped tests, independent review). Supersedes `architecture.md §7`. |
+| [`compatibility.md`](compatibility.md) | **Mandatory** cross-browser & mobile spec — support matrix (evergreen + iOS Safari 15.4+), the touch control scheme (touch-to-aim, hold to fire), iOS-Safari requirements (audio unlock, viewport, storage), and the required Playwright matrix. |
 
 ## Area task docs
 
@@ -32,7 +34,7 @@ area doc.
 | 07 | Main Menu | [`areas/07-main-menu.md`](areas/07-main-menu.md) | MainMenu scene, options + navigation + routing, title presentation, attract/idle mode. |
 | 08 | Highscores | [`areas/08-highscores.md`](areas/08-highscores.md) | Highscore model, entry scene (retro initials), top-N list scene, qualification/sort logic (via Persistence repo). |
 | 09 | State & Persistence | [`areas/09-state-and-persistence.md`](areas/09-state-and-persistence.md) | SceneManager implementation + legal transitions, localStorage wrapper (versioned, migrations, in-memory fallback), settings/highscores/meta repos. |
-| 10 | HUD & In-game UI | [`areas/10-hud-ui.md`](areas/10-hud-ui.md) | In-game overlay (meter bars incl. literal 💩, ruble counter, pinball score/combo, post integrity), incident banner, resident interaction menu (view + intents). |
+| 10 | HUD & In-game UI | [`areas/10-hud-ui.md`](areas/10-hud-ui.md) | In-game overlay (meter bars incl. a poo-emoji icon 💩, ruble counter, pinball score/combo, post integrity), incident banner, resident interaction menu (view + intents). |
 | 11 | Art & Visual Style | [`areas/11-art-visual-style.md`](areas/11-art-visual-style.md) | Palette, sprite specs, parallax skyline + day/night, font, animation, the asset-manifest contract + placeholder-art provider. |
 | 12 | Credits View | [`areas/12-credits.md`](areas/12-credits.md) | Scrolling credits scene + the contributor roster (who participated, with what title). |
 
@@ -61,16 +63,26 @@ scenes) — never by importing each other's internals.
 3. **Integrate via contracts only** — the `GameState` slice your area owns and the
    typed event bus. Don't reach into another area's modules.
 4. **Data-driven content** lives in `src/content/`, not buried in system code.
-5. **Tests are mandatory and must pass.** Each area doc lists its required automated
-   tests as a *minimum*. An area is not done until `npm run check`
-   (`tsc --noEmit && eslint . && vitest run`) is green and logic coverage ≥ 85%.
+5. **Tests are mandatory and CI-enforced.** Built by AI → gates are un-gameable (see
+   [`testing.md`](testing.md)). Each area lists its required tests as a *minimum*. An
+   area is not done until **CI** is green: `npm run check`
+   (`tsc --noEmit && eslint . && vitest run`), the Playwright cross-browser matrix,
+   the content-lint, and (logic areas) the mutation run — with logic coverage ≥ 85%
+   on lines/branches/functions and an independent reviewer's sign-off.
 6. **Respect & compliance.** Obey [`compliance.md`](compliance.md): satire targets the
    regime/war/military-institution, never ordinary Russian people or ethnic
-   stereotypes. All player-facing copy, names, art, and audio must comply.
+   stereotypes. All player-facing copy, names, art, and audio must comply (enforced by
+   content-lint + independent review).
+7. **Cross-browser & mobile.** Obey [`compatibility.md`](compatibility.md): the game
+   is a first-class **mobile** target (iOS Safari 15.4+). Input is touch-to-aim /
+   hold-to-fire via Pointer Events; rendering, audio, and storage honor the Safari
+   requirements; the Playwright WebKit + mobile suite must pass.
 
 ## Definition of done (per area)
 
-See `architecture.md §9`. In short: matches the GDD + its area doc, honors the shared
-contracts, required tests authored **and passing**, clean lint/types, and a short
-public-API note. Tone check: keep all player-facing copy relentlessly cheerful over
-the grim subject matter (GDD §2).
+See `architecture.md §9` (and `testing.md`, `compatibility.md`). In short: matches the
+GDD + its area doc, honors the shared contracts, required tests authored **and passing
+in CI** (incl. the cross-browser matrix where applicable), no gate-gaming shortcuts,
+clean lint/types, a short public-API note, and an independent reviewer's sign-off.
+Tone check: keep all player-facing copy relentlessly cheerful over the grim subject
+matter (GDD §2).

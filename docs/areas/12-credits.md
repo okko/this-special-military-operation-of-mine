@@ -172,8 +172,8 @@ other areas' internals.
 
 ## 8. Required automated tests (MUST pass)
 
-Under `jsdom`; deterministic (injected `dt`); `npm run check` green per
-architecture.md §7. Minimum:
+Under `jsdom`; deterministic (injected `dt`); must pass in CI (`npm run check` + the
+Playwright matrix green; no gate-gaming shortcuts) per `testing.md`. Minimum:
 
 1. **Roster renders:** every `CreditEntry` (title + each name) and every section
    `heading` in `CREDITS` is drawn/present in the rendered output.
@@ -199,8 +199,11 @@ architecture.md §7. Minimum:
       behaviors work; reduced-motion honored.
 - [ ] Roster lives in `src/content/credits.ts`, lists real contributors with titles
       (no fabricated names), and maps 1:1 to the area list.
-- [ ] All §8 tests authored and passing; `npm run check` green.
-- [ ] Tone reviewed (cheerful over grim, GDD §2).
+- [ ] Satisfies its `compatibility.md §9` row: readable and navigable (scrub/back) at
+      mobile scale within the safe-area insets; covered by the Playwright matrix.
+- [ ] All §8 tests authored and passing in CI; `npm run check` green (`testing.md`).
+- [ ] Tone reviewed (cheerful over grim, GDD §2); roster copy cleared by compliance
+      review (`compliance.md §5`).
 
 ## 10. Open questions / risks
 

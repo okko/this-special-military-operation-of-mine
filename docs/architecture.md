@@ -3,20 +3,27 @@
 > Status: **Foundation doc (authored by lead).** This defines the tech stack,
 > project structure, the shared contracts that let independent areas integrate, the
 > testing strategy every area must satisfy, and the template every area task
-> follows. Read `docs/game-design.md` and `docs/compliance.md` first.
+> follows. Read `docs/game-design.md` and `docs/compliance.md` first, then
+> `docs/testing.md` (quality gates) and `docs/compatibility.md` (browser/mobile).
 
 ## 1. Tech stack
 
 - **Language:** TypeScript, `strict: true`. No implicit `any`.
 - **Build/dev:** [Vite](https://vitejs.dev/) (ES modules, fast HMR, static build).
 - **Rendering:** **Canvas 2D** at a fixed internal resolution, integer-scaled to the
-  viewport with `image-rendering: pixelated`. No game framework by default (keeps
-  logic testable and dependency-light). Internal resolution: **384×216** (16:9).
+  viewport with `image-rendering: pixelated` (+ Safari fallbacks — see
+  `compatibility.md §2`). No game framework by default (keeps logic testable and
+  dependency-light). Internal resolution: **384×216** (16:9).
 - **Audio:** Web Audio API (see Audio area).
 - **Tests:** [Vitest](https://vitest.dev/) (+ `jsdom` environment for DOM/canvas-
-  touching tests). Optional Playwright smoke test for the booted app.
+  touching tests) for unit/integration/DOM; **mandatory** [Playwright](https://playwright.dev/)
+  cross-browser matrix (Chromium + WebKit + Firefox + emulated iPhone) as a CI gate —
+  see `testing.md` and `compatibility.md §8`.
 - **Lint/format:** ESLint + Prettier. **Typecheck:** `tsc --noEmit`.
 - **Persistence:** `localStorage` via a wrapped, injectable storage module.
+
+**Target browsers:** evergreen desktop + iOS/iPadOS Safari 15.4+ (mobile is a
+first-class target). Full matrix and Safari specifics in `compatibility.md`.
 
 No backend. Everything runs client-side and ships as static files.
 
@@ -144,25 +151,23 @@ scenes. The lead owns the `SceneManager` skeleton in `state/`.
 
 ## 7. Testing strategy (mandatory for every area)
 
-Every area task **must** ship automated tests, and **all tests must pass** (`npm
-test` green, `tsc --noEmit` clean, lint clean) before the area is "done." Specifics:
+**The full testing contract now lives in [`testing.md`](testing.md)** — it supersedes
+this section. In short: this game is **built by AI**, so the gates are designed to be
+**un-gameable and CI-enforced**, not assertable. Highlights:
 
-- **Unit tests (Vitest):** cover the area's pure logic — meter drain curves, scoring
-  math, spawn schedules at given seeds, economy transitions, incident triggers.
-  Deterministic via seeded RNG and injected `dt`.
-- **Integration tests (Vitest):** cross-area behavior through the event bus and
-  `GameState` (e.g. "destroying a drone adds 1 ruble *and* emits `scoreChanged`").
-- **DOM/canvas tests:** under `jsdom`; assert HUD/menus render expected text/state
-  and that storage round-trips. Use a fake/in-memory storage in tests.
-- **Coverage:** logic modules (`systems/`, `content/` validators, scoring, meters,
-  economy) target **≥ 85% line coverage**. Rendering/audio may be lower but must
-  have at least smoke tests.
-- **No flakiness:** tests must not depend on wall-clock, real timers, real audio
-  hardware, or `Math.random()`. Mock the Web Audio and Storage interfaces.
-- **CI gate:** `npm run check` = `tsc --noEmit && eslint . && vitest run`. Areas are
-  not complete until this is green.
+- Unit + integration + DOM tests in **Vitest** (deterministic via seeded RNG and
+  injected `dt`; no wall-clock/real-timer/`Math.random()`/real audio).
+- **`npm run check`** = `tsc --noEmit && eslint . && vitest run`, **plus** the
+  mandatory **Playwright cross-browser matrix** (`compatibility.md §8`), the
+  content-compliance lint, and (for logic areas) **mutation testing** (StrykerJS).
+- Coverage on logic modules: **≥ 85% lines, branches, and functions** (not lines
+  alone); thresholds are committed and lowering them needs lead sign-off.
+- A **determinism golden test** guards "same seed ⇒ identical run."
+- **CI is the source of truth** — an area is done only when CI is green and an
+  **independent reviewer** (not the authoring agent) has signed off.
 
-Each area task lists its **required tests** explicitly. Treat that list as a minimum.
+Each area task lists its **required tests** explicitly in its §8. Treat that list as a
+minimum, and see `testing.md` for the anti-pattern rules every test must satisfy.
 
 ## 8. Integration & ownership rules
 
@@ -181,12 +186,21 @@ An area is complete when:
 
 1. Its functionality matches the requirements in its task doc and the GDD.
 2. Public interfaces match the contracts in this doc (or changes were approved).
-3. Required automated tests are authored **and pass**; `npm run check` is green.
-4. No `console` spam, no `any` without a written justification, no dead code.
+3. Required automated tests are authored **and pass in CI** — `npm run check`, the
+   Playwright cross-browser matrix, and (for logic areas) the mutation run are all
+   green per `testing.md`. CI is the source of truth, not an agent's claim.
+4. No `console` spam, no `any` without a written justification, no dead code, and no
+   gate-gaming shortcuts (`.only`/`.skip`, bare `@ts-ignore`/`as any`, lowered
+   thresholds, assertion-free or mock-only tests) — see `testing.md §4`.
 5. A short README section (or doc update) documents the area's public API and data
    tables.
 6. All player-facing copy, names, art, and audio comply with `docs/compliance.md`
-   (respect & anti-stereotype policy).
+   (respect & anti-stereotype policy), verified by the content-lint + an independent
+   reviewer (`testing.md §8`).
+7. If the area renders, takes input, plays audio, or persists, it satisfies its row
+   in `docs/compatibility.md §9` and the matching cross-browser tests pass on WebKit.
+8. An **independent reviewer** (not the agent that wrote the code) has signed off
+   (`testing.md §9`).
 
 ---
 

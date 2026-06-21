@@ -38,6 +38,15 @@ tests). The cheerful, bouncy soundtrack is a core part of the game's tonal contr
    gesture. The audio engine exposes `unlock()` which `resume()`s the context; Core
    input calls it on the first pointer/key/touch event. Before unlock, calls are
    queued or no-op safely (never throw). After unlock, playback proceeds normally.
+   **iOS Safari specifics (`compatibility.md §5`):** `WebAudioBackend` constructs via
+   `AudioContext ?? webkitAudioContext`, and `resume()` must run **synchronously inside
+   the user-gesture handler** (iOS won't unlock from a deferred/async callback) — the
+   Core unlock hook is wired to a direct `pointerdown`/`keydown`/`touchend` handler.
+2a. **Backgrounding / visibility.** iOS suspends the context when the tab/app
+    backgrounds. On `visibilitychange→hidden` (and `pagehide`) the game **auto-pauses**
+    and the engine quiesces; on `visibilitychange→visible` the engine `resume()`s the
+    context before play continues. Audio must never get stuck silent after a return
+    from background.
 3. **Gain graph.** Three gain nodes: `master → destination`, with `music` and `sfx`
    sub-gains feeding `master`. Every source connects through its channel gain.
    Effective volume = `master * channel`, with mute forcing the relevant gain to 0
@@ -182,6 +191,11 @@ All tests use `FakeAudioBackend`; per architecture.md §7 the suite must be gree
     `maxVoices` simultaneous `gunFire` voices.
 11. **Placeholder fallback:** with `usePlaceholders` (or a missing asset), `playTone`
     is used instead of `playBuffer` and the call still succeeds.
+12. **Visibility resume (`FakeAudioBackend`):** a simulated `visibilitychange→hidden`
+    quiesces and the game pauses; `→visible` calls `resume()` and playback continues —
+    audio is never left silent after backgrounding.
+13. **WebKit unlock smoke (Playwright, `compatibility.md §8`):** on the WebKit/iPhone
+    project, after the first tap the real context reaches `state === 'running'`.
 
 ## 9. Acceptance criteria / Definition of done
 
@@ -191,13 +205,19 @@ All tests use `FakeAudioBackend`; per architecture.md §7 the suite must be gree
 - [ ] Volume/mute read from Settings and update live.
 - [ ] Placeholder-tone fallback lets dependent areas integrate before real assets ship.
 - [ ] Audio never throws into the game loop; failures degrade gracefully.
-- [ ] All §8 tests authored and passing; `npm run check` green (global DoD, architecture.md §9).
+- [ ] iOS unlock works (synchronous in-gesture `resume()`, `webkitAudioContext`
+      fallback) and audio recovers after backgrounding (visibility resume + auto-pause).
+- [ ] All §8 tests authored and passing; `npm run check` green **and the WebKit
+      Playwright unlock smoke passes** (global DoD, architecture.md §9; `testing.md`).
 
 ## 10. Open questions / risks
 
 - **Layered stems vs. track swaps** for intensity — decide based on asset budget;
   API stays intensity-level driven either way.
-- Mobile autoplay/`resume()` quirks (iOS Safari) — verify unlock gesture coverage.
+- Mobile autoplay/`resume()` quirks (iOS Safari) — **addressed**: synchronous
+  in-gesture unlock + `webkitAudioContext` fallback + visibility resume (§3.2/§3.2a),
+  with a WebKit Playwright smoke (`compatibility.md §5/§8`). Remaining: confirm on a
+  real iOS device per the documented matrix caveat.
 - Decode cost of many SFX at boot — consider lazy decode + caching; measure.
 - Avoiding gunfire SFX "machine-gun clipping" — tune `maxVoices`/rate-limit or use a
   gated loop sample; needs a real-asset pass.

@@ -279,9 +279,9 @@ Economy). Calls `ctx.applyRelief` (Meters area) for all reliefs.
 
 ## 8. Required automated tests (MUST pass)
 
-Per architecture.md §7 — deterministic (seeded RNG, injected `dt`), no wall clock,
-mocked relief sink and event bus. **All of the following must pass; `npm run check`
-must be green.**
+Per `testing.md` — deterministic (seeded RNG, injected `dt`), no wall clock, mocked
+relief sink and event bus. **All of the following must pass in CI (`npm run check` +
+the content-lint green; no gate-gaming shortcuts).**
 
 Unit:
 1. **Income banks +1.** A `droneDestroyed{byPlayer:true}` raises `rubles` by 1 and
@@ -348,8 +348,14 @@ Integration:
 - [ ] Favor-consequence catalog (all four kinds) implemented.
 - [ ] `getAvailableInteractions` gives the HUD everything it needs; Economy renders
       nothing.
-- [ ] All §8 tests authored **and passing**; `tsc --noEmit`, ESLint, and `vitest run`
-      green; logic coverage ≥ 85%.
+- [ ] All §8 tests authored **and passing in CI**; `tsc --noEmit`, ESLint, and
+      `vitest run` green; logic coverage ≥ 85% (lines/branches/functions) + mutation
+      threshold (`testing.md §5`).
+- [ ] **Highest compliance-risk area:** the roster / service / favor / dialog tables
+      pass the automated content-lint AND an **independent** compliance review
+      (`compliance.md §5`, `testing.md §8`); the `compliance.md §6` watch-items
+      (Old Dmitri / vodka / "drunk", degraded-favor flavor) are re-checked as named
+      regression cases on every change.
 - [ ] Public API + content tables documented in the area README section.
 
 ## 10. Open questions / risks

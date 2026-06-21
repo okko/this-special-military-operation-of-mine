@@ -156,8 +156,9 @@ belongs in area 09.
 ## 8. Required automated tests (MUST pass)
 
 All tests deterministic; no real `localStorage`, no wall clock — inject a
-**fake/in-memory `HighscoreRepo`** and pass `dateISO` explicitly. Per
-`architecture.md §7`, `npm run check` must be green.
+**fake/in-memory `HighscoreRepo`** and pass `dateISO` explicitly. Per `testing.md`,
+must pass in CI (`npm run check` + the Playwright matrix + content-lint green; no
+gate-gaming shortcuts).
 
 Unit (pure logic — `table.ts`):
 1. **qualifies — table not full:** any score (even 0) qualifies when fewer than N
@@ -203,9 +204,14 @@ On top of the global DoD (`architecture.md §9`):
       `HighscoreRepo`.
 - [ ] Both scenes implement the Scene interface and are reachable per the
       game-over/main-menu routing.
-- [ ] Character picker makes name entry fully possible without a physical keyboard.
-- [ ] Fresh install shows a seeded, sorted table; never an empty screen.
-- [ ] All tests in §8 authored and passing; `npm run check` green.
+- [ ] Character picker makes name entry fully possible without a physical keyboard —
+      the on-screen picker is the **touch** input method (no hardware keyboard on
+      mobile), tappable within safe-area insets and verified on the Playwright matrix
+      (`compatibility.md §8/§9`).
+- [ ] Fresh install shows a seeded, sorted table; never an empty screen. Seed names +
+      flavor lines pass the content-lint + independent compliance review
+      (`compliance.md §5/§6` — seed names must not be ethnic caricatures).
+- [ ] All tests in §8 authored and passing in CI; `npm run check` green (`testing.md`).
 
 ## 10. Open questions / risks
 

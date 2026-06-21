@@ -210,8 +210,8 @@ emits events. It never imports Meters/Economy/Engine modules.
 
 ## 8. Required automated tests (MUST pass)
 
-All deterministic (seeded RNG, injected `dt`); `npm run check` green per
-architecture.md §7. Minimum:
+All deterministic (seeded RNG, injected `dt`); must pass in CI (`npm run check` +
+content-lint green; no gate-gaming shortcuts) per `testing.md`. Minimum:
 
 1. **Scheduler frequency scales with `D`:** mean inter-incident interval at high `D`
    is shorter than at low `D` over a fixed seed/sample; clamped at `MIN_INTERVAL`.
@@ -248,8 +248,12 @@ architecture.md §7. Minimum:
 - [ ] `IncidentsState` + `IncidentFlags` match §4; flags recomputed each tick from a
       frozen `DEFAULT_FLAGS`.
 - [ ] Only emits events + mutates own slice; no imports of other areas' systems.
-- [ ] All §8 tests authored and passing; logic coverage ≥85%; `npm run check` green.
-- [ ] Catalog copy reviewed for the cheerful-but-grim tone (GDD §2).
+- [ ] All §8 tests authored and passing in CI; logic coverage ≥85%
+      (lines/branches/functions) + mutation threshold; the seeded scheduler is covered
+      by the determinism golden (`testing.md §5/§6`); `npm run check` green.
+- [ ] Catalog copy (incident names + grim flavor) reviewed for the cheerful-but-grim
+      tone (GDD §2) and cleared by the content-lint + an **independent** compliance
+      review (`compliance.md §5`).
 
 ## 10. Open questions / risks
 

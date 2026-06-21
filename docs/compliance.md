@@ -49,6 +49,16 @@ dialog), Main Menu (taglines), Art (resident/civilian depiction), Audio (any VO/
 - New or changed player-facing content gets a compliance check before merge.
 - Content tables (residents, incidents, highscore seeds) are reviewed as data, not
   just as code.
+- **Automated content-lint (CI gate).** Because this game is built by AI and the AI
+  authors player-facing copy at scale, a lint over `src/content/` tables and UI copy
+  fails CI on forbidden terms (slurs/dehumanizing language) and on flagged
+  anti-stereotype framings. It is a coarse safety net, **not** a substitute for the
+  human/independent judgment in §7's quick test.
+- **Independent compliance review.** A structured per-PR compliance checklist is
+  reviewed by **someone other than the agent that authored the content** (see
+  `testing.md §8–§9`). The author signing off on their own copy does not count.
+- The §6 watch-items are **named regression cases**: whenever that content changes,
+  the reviewer re-checks each one explicitly.
 
 ## 6. Current watch-items (reviewed & retained by owner decision — keep within bounds)
 These were reviewed and **kept**; authors must keep their framing pointed at the

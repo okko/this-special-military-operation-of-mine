@@ -45,12 +45,14 @@ All meters are `number` in `[0, 100]`, clamped. Convention: **0 = comfortable/sa
 | Key | Indicator | Rises when… | Relieved by… |
 |---|---|---|---|
 | `sleep` | 😴 | always; faster at night | nap (resident covers post), coffee (temporary), vodka (partial) |
-| `poo`   | 💩 (literal poo emoji in HUD) | always; faster after eating/drinking | toilet — **blocked during pipe-failure incident** |
+| `poo`   | 💩 (poo-emoji icon in HUD) | always; faster after eating/drinking | toilet — **blocked during pipe-failure incident** |
 | `hunger`| 🍞 | always | food |
 | `thirst`| 💧 | always; faster during day & under heavy fire | water |
 | `vice`  | 🚬 | always | cigarette (small) **or** vodka (large) |
 
-> **Hard requirement:** the `poo` indicator must literally be the poo emoji `💩`.
+> **Requirement:** the `poo` indicator must clearly read as the poo emoji `💩` (a
+> pixel-art icon that looks like 💩 is fine — it need not be the literal system glyph;
+> see `compatibility.md §2`). Rendering is owned by HUD/Art.
 
 ### 3.2 Drain model
 Each meter rises by `baseRate * modifier * dt` per tick (`dt` in seconds). Rates are
@@ -261,8 +263,9 @@ Persistence (this area exposes the values).
 
 ## 8. Required automated tests (MUST pass)
 
-Per architecture.md §7, all tests must pass (`npm run check` green) before this area
-is done. Deterministic via injected `dt` and seeded RNG; mock `events`/`content`.
+Per `testing.md`, all tests must pass **in CI** (`npm run check` green; no gate-gaming
+shortcuts) before this area is done. Deterministic via injected `dt` and seeded RNG;
+mock `events`/`content`.
 
 1. **Drain — baseline:** after `update` with fixed `dt` over N ticks, each meter
    equals `baseRate * diff * elapsed` (within float epsilon), clamped at 100.
@@ -308,13 +311,16 @@ Target ≥85% line coverage for this area's logic.
 
 - [ ] `MetersState`, `update`, `computeEffects`, `applyRelief`, `isCrisis` implemented
       and typed per §4; no `any`.
-- [ ] All five meters with the exact indicators; 💩 is the literal poo emoji.
+- [ ] All five meters with the exact indicators; the poo indicator reads as 💩.
 - [ ] Drain model, thresholds, debuffs, crisis & compound rules match §3, all tunables
       in `src/content/meters.ts`.
 - [ ] Relief API behaves per §3.5 including vodka/coffee/cigarette distinctions and
       pipe-failure blocking.
 - [ ] Emits `meterCrisis` and `gameOver` per the event contract.
-- [ ] All required tests authored and passing; `npm run check` green; ≥85% coverage.
+- [ ] All required tests authored and passing in CI; `npm run check` green; ≥85%
+      coverage on **lines, branches, AND functions**, and the **mutation run**
+      (`testing.md §5`) clears its threshold — drain curves and crisis/compound rules
+      are exactly the logic shallow tests miss.
 - [ ] Pure logic only — no imports of render/audio/DOM; deterministic.
 
 ## 10. Open questions / risks

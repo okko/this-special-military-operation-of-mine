@@ -90,17 +90,23 @@ the heartbeat that every other gameplay area reacts to via the event bus.
     it reaches its building target → **escape**.
 
 ### 3.4 The machine gun — aiming
-12. **Primary aim:** pointer (mouse/touch) position defines the **desired aim
-    angle** from the gun pivot. The gun barrel rotates toward that angle at a
-    finite **turn rate** (so flick-aim has weight and meter sway matters).
+12. **Primary aim:** the pointer position (unified mouse/touch/pen via Core's Pointer
+    Events; `compatibility.md §4`) defines the **desired aim angle** from the gun
+    pivot. The gun barrel rotates toward that angle at a finite **turn rate** (so
+    flick-aim has weight and meter sway matters).
 13. **Keyboard fallback:** Left/Right (or A/D) rotate the barrel at the turn rate;
     this must be fully playable without a pointer (accessibility + tests).
 14. **Effective aim** = desired aim + `AimModifier` offset (see 3.7). The gun fires
     along the **effective** angle, not the raw desired angle.
 
 ### 3.5 The machine gun — firing, cooldown, overheat, jam
-15. Firing is **continuous while the fire input is held** (mouse button / Space),
-    gated by a **fire interval** (`1 / fireRate`). `fireRate` is a tuned constant.
+15. Firing is **continuous while the fire input is held**, gated by a **fire
+    interval** (`1 / fireRate`). `fireRate` is a tuned constant. The held signal comes
+    from `fireDown`/`fireUp` regardless of source: **mouse button**, **Space**, or — on
+    touch — a **held pointer** (the touch-to-aim/hold-to-fire scheme, `compatibility.md
+    §4`). The scene treats Core's `pointercancel`→`fireUp` like any release, so a touch
+    interrupted by an iOS call/notification never leaves the gun stuck firing. Overheat
+    and the jam hook are driven by these same signals — no separate touch path.
 16. **Overheat (chosen over finite ammo):** the gun has a 0–100 `heat` value.
     Firing adds heat per shot; not firing cools it. At `heat >= 100` the gun
     **overheats** and locks until heat falls below a `cooloffResume` threshold.
@@ -265,8 +271,8 @@ final `gameOver` tally; this area does not write `localStorage`.
 
 ## 8. Required automated tests (MUST pass)
 
-Per `architecture.md` §7, all tests must pass (`npm run check` green) before this
-area is done. At minimum:
+Per `testing.md`, all tests must pass **in CI** (`npm run check` + the Playwright
+matrix green; no gate-gaming shortcuts) before this area is done. At minimum:
 
 1. **Spawn determinism by seed:** same `(seed, D, dt sequence)` ⇒ identical
    `SpawnCommand[]` (kinds, positions, timing). Different seeds differ.
@@ -298,6 +304,13 @@ area is done. At minimum:
     effective turn rate.
 13. **Keyboard aim parity:** the gun can be aimed and fired with keyboard-only
     input (no pointer) and produces equivalent firing behavior.
+14. **Touch hold-to-fire & cancel:** a held pointer aims and fires continuously at
+    `fireRate`; releasing stops; a **`pointercancel`** (interruption) stops firing
+    exactly like `fireUp` — the gun never sticks firing. Overheat still triggers under
+    a sustained held touch.
+15. **End-to-end on WebKit (Playwright, `compatibility.md §8`):** in a real run, a
+    tap/click in the sky aims, fires, and destroys a drone on the WebKit + emulated
+    iPhone projects (covers the §3.4/§3.5 control scheme on the Safari engine).
 
 ## 9. Acceptance criteria / Definition of done
 
@@ -306,7 +319,8 @@ area is done. At minimum:
 - [ ] `Playing` scene runs the full loop deterministically under a fixed seed.
 - [ ] Drones spawn from all skyline edges, scale with `D`, and resolve via kill or
       escape.
-- [ ] Gun supports pointer + keyboard aim, fire-rate, overheat, and the jam hook.
+- [ ] Gun supports pointer (mouse + touch hold-to-fire) + keyboard aim, fire-rate,
+      overheat, and the jam hook; `pointercancel` cannot leave the gun stuck firing.
 - [ ] Kills grant +1 ruble and emit the documented events; escapes damage Post
       Integrity; integrity 0 ends the run.
 - [ ] Aim modifiers from Meters are applied to effective aim.

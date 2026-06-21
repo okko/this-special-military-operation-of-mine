@@ -47,7 +47,10 @@ no other area is ever blocked waiting on final pixels.
   cheerful even during grim events (a "you soiled yourself" crisis flashes in
   friendly game-show colors). This contrast is the identity.
 - Target internal resolution **384×216** (per architecture.md §1), integer-scaled.
-  Design every sprite for this resolution; assume `image-rendering: pixelated`.
+  Design every sprite for this resolution; assume `image-rendering: pixelated` (with
+  the Safari fallbacks `-webkit-optimize-contrast`/`crisp-edges` and
+  `imageSmoothingEnabled = false`; see `compatibility.md §2`). Sprites must read
+  crisply when CSS-upscaled from the 384×216 backing buffer on high-DPI screens.
 
 ### 3.2 Palette
 A tight 32-swatch palette. Exported from `src/render/palette.ts` as a frozen object;
@@ -134,18 +137,20 @@ unless noted; drones/projectiles/explosions use **center**.
 > ids follow whatever final set is agreed; the registry in §4 is the single source of
 > truth both areas import.
 
-### 3.4 Need indicators — emoji vs pixel icon
-- The GDD §5 **mandates** the poo meter use the literal **💩 emoji**. So `icon.poo`
-  is rendered as the emoji glyph via canvas `fillText` (system emoji font), boxed to
-  12×12.
-- **Recommendation:** render the other four (😴 sleep, 🍞 hunger, 💧 thirst, 🚬 vice)
-  as **custom 12×12 pixel icons** in the atlas, not emoji. Justification: (a) visual
-  consistency with the pixel art — system emoji break the 16-bit illusion and vary
-  per OS; (b) deterministic rendering and testability; (c) full palette control.
-  💩 is the deliberate exception the design calls for, and its incongruity is on-theme.
+### 3.4 Need indicators — pixel icons
+- **All five need indicators are custom 12×12 pixel icons in the atlas** (😴 sleep,
+  🍞 hunger, 💧 thirst, 🚬 vice, 💩 poo) — **none** are rendered as canvas `fillText`
+  emoji. Justification: (a) visual consistency with the pixel art — system emoji break
+  the 16-bit illusion and vary per OS; (b) deterministic rendering, testability, and
+  per-engine snapshot stability; (c) full palette control (`compatibility.md §2`).
+- **The poo icon must clearly read as the poo emoji 💩.** Per the owner (GDD §5), the
+  requirement is that it *looks like* 💩 — not that it is the literal system glyph — so
+  it is authored as a pixel-art icon like the other four (the swirl-and-face poo
+  silhouette). Its incongruity among the needs is on-theme.
 - Provide an **emoji-glyph fallback** path in the manifest (`glyph` field) so any icon
-  can fall back to an emoji if a pixel icon is missing — keeps areas unblocked.
-- Icon ids: `icon.sleep`, `icon.poo` (glyph 💩), `icon.hunger`, `icon.thirst`,
+  (incl. `icon.poo`, glyph `💩`) can fall back to a system emoji if its pixel art is
+  missing — used by the placeholder provider only, to keep areas unblocked.
+- Icon ids: `icon.sleep`, `icon.poo` (depicts 💩), `icon.hunger`, `icon.thirst`,
   `icon.vice`, plus `icon.ruble`.
 
 ### 3.5 Backgrounds — parallax skyline & day/night
@@ -324,15 +329,20 @@ On top of the global DoD (architecture.md §9):
       satisfy the interface; placeholder covers 100% of `SpriteId`s.
 - [ ] Drone type list reconciled with Gameplay Engine; ids updated to match.
 - [ ] Animation/timing table (§3.8) and overlay specs (§3.6) documented for Render.
+- [ ] Sprites read crisply when CSS-upscaled on high-DPI/mobile with the
+      `image-rendering` fallbacks; all five need-icons are pixel-art sprites (the poo
+      icon reads as 💩), pixel-consistent across engines (`compatibility.md §2`).
 - [ ] All §8 tests authored and passing; `npm run check` green.
 
 ## 10. Open questions / risks
 
 - **Drone roster churn:** if Gameplay Engine changes drone types, sprite ids and the
   placeholder map must follow. Mitigated by the single `SPRITE_IDS` registry.
-- **Emoji rendering variance:** 💩 (and any `glyph` fallback) looks different per
-  OS/browser and may not be pixel-aligned. Accept for 💩 (on-theme, mandated); test
-  only that it renders non-empty, not its appearance.
+- **Emoji rendering variance — RESOLVED (`compatibility.md §2`):** all five need-icons
+  (incl. poo, a pixel-art sprite that reads as 💩) are atlas sprites, so they are
+  pixel-identical across engines and snapshot-tested together. The only place a system
+  emoji can still appear is the optional `glyph` fallback used by the placeholder
+  provider before real art lands — and there per-OS variance is harmless.
 - **Palette budget pressure:** 16-bit feel wants restraint, but UI + meters + sky
   ramps compete for the 32 slots. May need to share ramps (test enforces the cap).
 - **Atlas growth:** one 512×512 sheet may not hold portraits for a large resident

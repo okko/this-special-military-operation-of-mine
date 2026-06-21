@@ -83,9 +83,15 @@ consume repositories, but they do not change these contracts without sign-off.
     **defaults**.
 11. The backend is **injectable**. Production uses `localStorage`; tests and
     private-mode/quota-exceeded situations use an **in-memory backend**. The wrapper
-    detects an unavailable/throwing `localStorage` at construction and transparently
-    falls back to in-memory (the game still runs; data just doesn't persist across
-    reloads).
+    detects an unavailable/throwing `localStorage` at construction **and at write
+    time** and transparently falls back to in-memory (the game still runs; data just
+    doesn't persist across reloads). **iOS Safari Private Mode is the key case**: it
+    throws `QuotaExceededError` on the **first `setItem`**, not at construction — so a
+    construction-only probe is insufficient; the first throwing write must switch the
+    backend and not surface an exception (`compatibility.md §6`).
+11a. **ITP limitation (documented, not worked around):** Safari may evict
+    `localStorage` after ~7 days of no interaction, so highscores/settings can vanish.
+    Acceptable for a single-player browser game; note it in the public-API doc.
 
 ### 3.3 Save/load lifecycle
 12. **No mid-run autosave of the live `GameState` by default.** A run is ephemeral;
@@ -276,7 +282,9 @@ tests use stub scenes; storage tests use the in-memory backend.
 11. **Missing key**: `get` returns defaults when the key is absent.
 12. **In-memory fallback**: when the backend's `setItem`/`getItem` throws (simulated
     private mode / quota), `createStorage` falls back to in-memory and the game keeps
-    working; no exception escapes.
+    working; no exception escapes. **Includes the iOS-Safari case** where construction
+    succeeds but the **first `setItem` throws** — the write-time fallback engages and
+    subsequent get/set works against the in-memory backend.
 13. **Settings persist & reload**: `patch` writes; a fresh repo over the same backend
     reads the patched values; `reset` restores defaults.
 14. **Highscores semantics**: `qualifies`/`rankFor` correct around the cap boundary;
@@ -291,7 +299,8 @@ In addition to the global DoD (architecture.md §9):
 - [ ] `SceneManager` enforces the §3.1 transition graph; pause/resume works without
       tearing down the gameplay scene.
 - [ ] `Storage` is version-aware with a working migrations chain and never throws on
-      corrupt/missing/unavailable storage.
+      corrupt/missing/unavailable storage — including the iOS-Safari Private-Mode case
+      where the **first write** throws (write-time in-memory fallback; `compatibility.md §6`).
 - [ ] All three repositories implement their interfaces with documented defaults and
       stable key names under the `orpd:` namespace.
 - [ ] Save/load lifecycle matches §3.3 (no live-run autosave; meta/highscore on game
