@@ -35,7 +35,12 @@ function droneColor(kind: string): PaletteKey {
   }
 }
 
-export function createPlayingScene(): Scene {
+/** Optional hooks for the host (main.ts). `onState` is a per-tick diagnostic sink used by the e2e. */
+export interface PlayingSceneOptions {
+  onState?: (gs: GameState) => void;
+}
+
+export function createPlayingScene(opts: PlayingSceneOptions = {}): Scene {
   let gs: GameState | null = null;
   let engine: Engine | null = null;
   let maxIntegrity = 100;
@@ -55,6 +60,7 @@ export function createPlayingScene(): Scene {
 
     update(dt: number): void {
       engine?.step(dt, { aimTarget, rotateDir: (right ? 1 : 0) - (left ? 1 : 0), fireHeld });
+      if (gs) opts.onState?.(gs);
     },
 
     onInput(e: InputEvent): void {
