@@ -6,10 +6,13 @@
   "mutate": [
     "src/core/**/*.ts",
     "src/persistence/**/*.ts",
+    "src/systems/**/*.ts",
+    "src/content/**/*.ts",
     "src/render/sprite-provider.ts",
     "src/render/scaler.ts",
     "src/state/scene-manager.ts",
-    "!src/**/*.test.ts"
+    "!src/**/*.test.ts",
+    "!src/test-support/**/*.ts"
   ],
   "reporters": ["html", "clear-text", "progress"],
   "coverageAnalysis": "perTest",

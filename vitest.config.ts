@@ -20,11 +20,15 @@ export default defineConfig({
         'src/content/**',
         'src/persistence/**',
         'src/input/**',
+        // Phase 2 gameplay logic (meters, economy, scoring, incidents) + the relief bridge.
+        'src/systems/**',
         'src/state/scene-manager.ts',
+        'src/state/create-game-state.ts',
         'src/render/scaler.ts',
         'src/render/sprite-provider.ts',
       ],
-      exclude: ['**/*.test.ts', '**/__fixtures__/**'],
+      // game-state.ts is pure interfaces (no runtime); test-support helpers are not product logic.
+      exclude: ['**/*.test.ts', '**/__fixtures__/**', 'src/test-support/**'],
       // Committed thresholds — lowering any of these requires lead sign-off (CODEOWNERS
       // guards this file). Lines-only is gameable by an AI; branches+functions close the gap.
       thresholds: {

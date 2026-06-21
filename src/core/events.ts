@@ -16,9 +16,15 @@ export interface GameEvents {
   serviceBought: { residentId: string; service: string; cost: number };
   favorBegged: { residentId: string; favor: string; consequence: string };
   incidentStart: { id: string };
-  incidentEnd: { id: string };
+  // Area 05 (Random Incidents) lead-approved extension: `survived` lets Scoring award the
+  // incident-survival bonus only on a clean completion (docs/areas/05-random-incidents.md §4).
+  incidentEnd: { id: string; survived: boolean };
   scoreChanged: { delta: number; total: number; reason: string };
   comboChanged: { multiplier: number };
+  // Poo-crisis "accident" spectacle hook (docs/areas/02-meters-and-status.md §3.4). Emitted by the
+  // Meters area on poo-crisis ENTRY; Scoring/Economy may react (penalty / reputation hit). Carries
+  // no payload — the magnitudes live in their respective balance tables.
+  pooAccident: Record<string, never>;
   // Extends the architecture §5 baseline ({score, cause}) with the run stats the persistence
   // layer needs to build a RunSummary on game over (Gameplay Engine, area 01, supplies them).
   gameOver: { score: number; cause: string; shiftSeconds: number; dronesDowned: number };
