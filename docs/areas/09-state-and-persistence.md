@@ -110,7 +110,7 @@ consume repositories, but they do not change these contracts without sign-off.
 
 ```ts
 // src/state/scene.ts
-export interface Scene<P = unknown> {
+export interface Scene<P = void> {
   enter(params: P, ctx: SystemContext): void;
   update(dt: number, ctx: SystemContext): void;   // not called while paused/overlaid
   render(r: Renderer): void;
@@ -122,9 +122,11 @@ export type SceneId =
   | 'Boot' | 'MainMenu' | 'Playing' | 'Paused'
   | 'GameOver' | 'HighscoreEntry' | 'Highscores' | 'Settings';
 
-// src/state/scene-manager.ts  (LEAD-OWNED skeleton)
+// src/state/scene-manager.ts  (LEAD-OWNED skeleton; this area implements it)
 export interface SceneManager {
-  register(id: SceneId, factory: () => Scene): void;
+  // Generic so scenes with typed params (e.g. GameOver) register type-safely. Scenes — and any
+  // repos they need — are supplied via factory closures; repos are NOT placed on SystemContext.
+  register<P>(id: SceneId, factory: () => Scene<P>): void;
   /** Replace the active scene (validates against the transition graph). */
   transition<P>(to: SceneId, params?: P): void;
   /** Stack an overlay (e.g. Pause) above the active scene without exiting it. */
@@ -137,8 +139,23 @@ export interface SceneManager {
   routeInput(e: InputEvent): void;
 }
 
-/** Legal transitions; manager rejects anything not listed. */
+/** Legal transitions; manager rejects anything not listed (throws IllegalTransitionError). */
 export const TRANSITIONS: Record<SceneId, SceneId[]>;
+
+/** Legal overlays per active scene — Pause is reached via pushOverlay, not a transition edge. */
+export const OVERLAYS: Partial<Record<SceneId, SceneId[]>>;   // e.g. { Playing: ['Paused'] }
+
+/** The manager captures `ctx` at construction (transition() carries none) and enters `initial`
+ *  (default 'Boot') lazily on the first update/render/transition. */
+export function createSceneManager(ctx: SystemContext, initial?: SceneId): SceneManager;
+
+// src/state/scene-params.ts — typed transition params (destination → enter() payload).
+export interface SceneParams {
+  Boot: void; MainMenu: void; Playing: void; Paused: void; Settings: void;
+  GameOver: { score: number; cause: string };
+  HighscoreEntry: { score: number; rank: number; runSummary: RunSummary };
+  Highscores: { highlightRank?: number };
+}
 ```
 
 ```ts
@@ -195,12 +212,15 @@ Stored schemas (all under the `orpd:` namespace, JSON-encoded, wrapped with
 `{ version, data }`):
 
 ```ts
+// Reconciled superset shared with Highscores (08). This is the SINGLE SOURCE OF TRUTH
+// (src/persistence/schemas.ts); area 08 imports it rather than redeclaring.
 interface HighscoreEntry {
   name: string;            // 3-char initials by default (Highscores area may widen)
   score: number;
   shiftSeconds: number;
   dronesDowned: number;
   dateISO: string;         // wall-clock captured at save time by the caller, not in logic
+  notable?: string;        // optional pre-rendered highlight, e.g. "12x combo" (area 08)
 }
 
 interface Settings {
@@ -209,7 +229,8 @@ interface Settings {
   sfxVolume: number;       // 0..1
   muted: boolean;
   bindings: Record<string, string>;   // action -> key/code; aim binding included
-  accessibility: { highContrast: boolean; reducedFlash: boolean; largeHud: boolean };
+  // reducedMotion added for the Art area (overlay/animation gating); see 11 §6.
+  accessibility: { highContrast: boolean; reducedFlash: boolean; reducedMotion: boolean; largeHud: boolean };
 }
 
 interface MetaStats {

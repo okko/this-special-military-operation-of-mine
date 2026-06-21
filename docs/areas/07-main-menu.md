@@ -36,9 +36,9 @@ menu-style scenes.
 
 ## 3. Requirements & mechanics
 
-1. **Scene lifecycle.** `MainMenu` implements `{ enter(ctx), update(dt, ctx),
-   render(r), exit(), onInput(e) }` and is the scene the `SceneManager` activates
-   after `Boot` completes (per architecture.md §6).
+1. **Scene lifecycle.** `MainMenu` implements `{ enter(params, ctx), update(dt, ctx),
+   render(r), onInput(e), exit() }` (the canonical `Scene` contract; scenes read `renderer.alpha`)
+   and is the scene the `SceneManager` activates after `Boot` completes (per architecture.md §6).
    - `enter()`: reset selection to the first enabled option, reset the idle timer,
      request the menu music track (fade-in), kick off the menu-in transition.
    - `update(dt)`: advance parallax/idle animations, advance the idle timer, drive

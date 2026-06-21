@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover + dynamic viewport units handle the iOS Safari URL bar and notch
+         (docs/compatibility.md §3). user-scalable=no suppresses double-tap zoom on the canvas. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <title>One Ruble Per Drone</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100vh; /* fallback */
+        height: 100dvh; /* dynamic viewport — survives iOS URL-bar show/hide */
+        background: #000;
+        overflow: hidden;
+        /* Gesture hygiene: suppress scroll, text selection, and the long-press callout. */
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        overscroll-behavior: none;
+      }
+      #app {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        /* Keep the letterbox clear of the notch / home indicator. */
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+          env(safe-area-inset-left);
+      }
+      #game {
+        display: block;
+        /* Crisp pixel-art upscale. Multiple declarations — each browser uses the last it
+           understands (docs/compatibility.md §2). */
+        image-rendering: -moz-crisp-edges;
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: crisp-edges;
+        image-rendering: pixelated;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+      }
+      /* Shown by the scaler when the device is in portrait (orientation lock is unavailable
+         on iOS Safari — we prompt, we cannot force; docs/compatibility.md §3). */
+      #rotate-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: #1a1c2c;
+        color: #fff6e6;
+        font-family: monospace;
+        font-size: 1.25rem;
+        text-align: center;
+        padding: 2rem;
+        z-index: 10;
+      }
+      #rotate-overlay[data-visible='true'] {
+        display: flex;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game" width="384" height="216"></canvas>
+    </div>
+    <div id="rotate-overlay" aria-hidden="true">Please rotate your device to landscape ☺</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

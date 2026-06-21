@@ -10,6 +10,11 @@ build/
 
 # Test / coverage
 coverage/
+test-results/
+playwright-report/
+.stryker-tmp/
+reports/
+*.tsbuildinfo
 
 # Logs & env
 *.log

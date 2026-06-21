@@ -1,0 +1,9 @@
+dist
+build
+coverage
+node_modules
+playwright-report
+test-results
+.stryker-tmp
+reports
+src/content/assets.manifest.json
