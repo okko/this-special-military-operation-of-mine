@@ -3,7 +3,7 @@
 > Status: **Foundation doc (authored by lead).** This defines the tech stack,
 > project structure, the shared contracts that let independent areas integrate, the
 > testing strategy every area must satisfy, and the template every area task
-> follows. Read `docs/game-design.md` first.
+> follows. Read `docs/game-design.md` and `docs/compliance.md` first.
 
 ## 1. Tech stack
 
@@ -185,6 +185,8 @@ An area is complete when:
 4. No `console` spam, no `any` without a written justification, no dead code.
 5. A short README section (or doc update) documents the area's public API and data
    tables.
+6. All player-facing copy, names, art, and audio comply with `docs/compliance.md`
+   (respect & anti-stereotype policy).
 
 ---
 
@@ -226,7 +228,9 @@ Events consumed/emitted; other slices read/written; injected ctx used.
 Enumerated test cases (unit + integration + DOM as applicable). This is a minimum.
 
 ## 9. Acceptance criteria / Definition of done
-Checklist specific to this area, on top of the global DoD (§9 above).
+Checklist specific to this area, on top of the global DoD (§9 above) — including the
+compliance check (player-facing copy/names/art/audio reviewed against
+`docs/compliance.md`).
 
 ## 10. Open questions / risks
 ```

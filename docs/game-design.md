@@ -28,6 +28,11 @@ How long can you last, and how high can you score?
 
 This is satire. Keep it absurd and human, not gratuitous.
 
+**Compliance:** satire targets the regime, war economy, and military-as-institution —
+never ordinary Russian people or ethnic stereotypes. See
+[`compliance.md`](compliance.md) (mandatory) for the full policy and the rules every
+content author must follow.
+
 ## 3. Core gameplay loop
 
 1. **Defend.** Drones spawn from the skyline at any angle and time. Aim the gun and

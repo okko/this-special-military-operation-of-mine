@@ -16,6 +16,7 @@ area doc.
 |---|---|
 | [`game-design.md`](game-design.md) | Game Design Document — premise, tone, the five need meters (incl. 💩), economy of services & favors, random incidents, pinball scoring, failure/game-over, persistence. |
 | [`architecture.md`](architecture.md) | Tech stack (TypeScript + Vite + Canvas 2D + Vitest), project structure, the shared `GameState`/event-bus/scene contracts, the **testing strategy (all tests must pass)**, ownership rules, and the area-doc template every area below follows. |
+| [`compliance.md`](compliance.md) | **Mandatory** respect & anti-stereotype policy — who we may mock (the regime/war/military-institution) and who we must never ridicule (ordinary Russian people). |
 
 ## Area task docs
 
@@ -63,6 +64,9 @@ scenes) — never by importing each other's internals.
 5. **Tests are mandatory and must pass.** Each area doc lists its required automated
    tests as a *minimum*. An area is not done until `npm run check`
    (`tsc --noEmit && eslint . && vitest run`) is green and logic coverage ≥ 85%.
+6. **Respect & compliance.** Obey [`compliance.md`](compliance.md): satire targets the
+   regime/war/military-institution, never ordinary Russian people or ethnic
+   stereotypes. All player-facing copy, names, art, and audio must comply.
 
 ## Definition of done (per area)
 
