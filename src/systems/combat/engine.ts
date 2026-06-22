@@ -11,14 +11,16 @@
  *    player-shot decoy earns nothing — `handleDroneDestroyed` alone would pay for it).
  */
 import { updateIncidents } from '../incidents';
-import { applyIncidentFlags, updateEconomy, bankIncome } from '../economy';
+import { applyIncidentFlags, updateEconomy, bankIncome, buyService, begFavor } from '../economy';
+import type { EconomyContext } from '../economy';
+import { createReliefSink } from '../relief-bridge';
 import { update as updateMeters, computeEffects } from '../meters';
 import type { MetersRead } from '../meters';
 import { updateScoring, registerScoring } from '../scoring';
 import { difficultyAt, phaseAt } from '../../core/difficulty';
 import type { SystemContext } from '../../core/system-context';
 import type { GameState } from '../../state/game-state';
-import { updateCombat, setJam } from './combat';
+import { updateCombat, setJam, clearJam } from './combat';
 import { deriveAimModifier } from './gun';
 import { IDLE_INTENT } from './types';
 import type { PlayerIntent } from './types';
@@ -46,6 +48,28 @@ export function createEngine(gs: GameState, ctx: SystemContext): Engine {
   });
   const offGameOver = ctx.events.on('gameOver', () => {
     over = true;
+  });
+
+  // Resident-panel intents (docs/areas/10-hud-ui.md §3.5): the HUD emits, the Engine applies via the
+  // Economy flows. The relief sink is bound to this run's (in-place-mutated) meters slice. A 'gun'-tagged
+  // service or a relief-less favor (the on-credit jam clear) has no meter relief — the Engine clears the
+  // jam itself (residents.ts: mechanic `clearjam`/`jamiou`).
+  const econCtx: EconomyContext = { ...ctx, applyRelief: createReliefSink(gs.meters, ctx) };
+  const offIntent = ctx.events.on('residentIntent', (intent) => {
+    const roster = ctx.content.economy.roster;
+    if (intent.kind === 'buyService') {
+      const res = buyService(gs.economy, intent.residentId, intent.serviceId, econCtx);
+      if (!res.ok) return;
+      gs.economy = res.value;
+      const svc = roster.find((r) => r.id === intent.residentId)?.services.find((s) => s.id === intent.serviceId);
+      if (svc?.tags.includes('gun')) clearJam(gs.combat);
+    } else if (intent.kind === 'begFavor') {
+      const res = begFavor(gs.economy, intent.residentId, intent.favorId, econCtx);
+      if (!res.ok) return;
+      gs.economy = res.value;
+      const fav = roster.find((r) => r.id === intent.residentId)?.favors.find((f) => f.id === intent.favorId);
+      if (fav && fav.relief === undefined) clearJam(gs.combat);
+    }
   });
 
   function step(dt: number, intent: PlayerIntent = IDLE_INTENT): void {
@@ -106,6 +130,7 @@ export function createEngine(gs: GameState, ctx: SystemContext): Engine {
     offScoring();
     offIncome();
     offGameOver();
+    offIntent();
   }
 
   return { step, dispose };

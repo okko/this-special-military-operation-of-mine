@@ -10,7 +10,12 @@ import { stepLoop } from './core/loop';
 import { loadContent } from './content/loader';
 import { createStorage } from './persistence/storage';
 import { createMetaStatsRepo } from './persistence/meta-stats-repo';
+import { createSettingsRepo } from './persistence/settings-repo';
 import { wireGameOver } from './persistence/gameover-wiring';
+import { createWebAudioBackend, type AudioSettings } from './audio/backend';
+import { createAudioEngine } from './audio/engine';
+import { createHudEconomy } from './ui/hud/economy-adapter';
+import type { SettingsView } from './ui/hud/types';
 import { createScaler } from './render/scaler';
 import { createCanvasRenderer } from './render/canvas-renderer';
 import { createPlaceholderProvider, createManifestProvider } from './render/sprite-provider';
@@ -30,6 +35,8 @@ import type { GameState } from './state/game-state';
 declare global {
   interface Window {
     __combat?: { dronesDowned: number; drones: Array<{ x: number; y: number }>; aimAngle: number };
+    // Mirrors the live AudioContext state for the WebKit unlock smoke (tests/e2e). Harmless in prod.
+    __audio?: { readonly state: string };
   }
 }
 
@@ -46,14 +53,42 @@ function main(): void {
   const content = loadContent({ manifest: manifestJson }); // throws loudly on malformed data
   const ctx: SystemContext = { rng, events, content };
 
-  // Persistence (settings/highscores repos are consumed by menus/audio in later phases).
+  // Persistence.
   const storage = createStorage();
   const meta = createMetaStatsRepo(storage);
+  const settings = createSettingsRepo(storage).get();
+  const settingsView: SettingsView = {
+    reducedFlash: settings.accessibility.reducedFlash,
+    largeHudText: settings.accessibility.largeHud,
+    pauseWhilePanelOpen: settings.accessibility.pauseWhilePanelOpen,
+    residentPanelKey: settings.bindings.residentPanel ?? 'KeyE',
+  };
+  const audioSettings: AudioSettings = {
+    master: settings.masterVolume,
+    music: settings.musicVolume,
+    sfx: settings.sfxVolume,
+    muted: settings.muted,
+  };
 
   // Render.
   const scaler = createScaler(canvas, rotateOverlay);
   const sprites = createManifestProvider(content.manifest, createPlaceholderProvider());
   const renderer = createCanvasRenderer(ctx2d, sprites);
+
+  // Audio (area 06): the real Web Audio backend behind the injectable seam; SFX + music wired to the
+  // event bus. Stays suspended until the first user gesture unlocks it (iOS-safe, below).
+  const audioBackend = createWebAudioBackend();
+  const audio = createAudioEngine(content.audio);
+  audio.init(audioBackend, audioSettings);
+  audio.bind(events);
+  window.__audio = {
+    get state(): string {
+      return audioBackend.state;
+    },
+  };
+
+  // HUD (area 10): the economy selector adapter the resident panel reads.
+  const hudEconomy = createHudEconomy(content);
 
   // Scene machine + the reachable scenes. The Gameplay Engine (area 01) owns Playing; GameOver is a
   // placeholder until the GameOver/Highscores areas (Phase 5) land — registered so `wireGameOver`'s
@@ -69,15 +104,18 @@ function main(): void {
   const manager = createSceneManager(ctx, 'Boot');
   manager.register('Boot', () => createBootScene(manager, meta));
   manager.register('MainMenu', () => createStartScene(() => manager.transition('Playing')));
-  manager.register('Playing', () => createPlayingScene({ onState }));
+  manager.register('Playing', () =>
+    createPlayingScene({ onState, hud: { settings: settingsView, economy: hudEconomy }, audio }),
+  );
   manager.register('GameOver', () => createPlaceholderScene('GAME OVER', 'refresh to play again'));
   wireGameOver(events, manager, meta);
 
   // Input (the audio-unlock hook is consumed by the Audio area in a later phase).
   createInput(canvas, scaler, {
     onEvent: (e) => manager.routeInput(e),
+    // iOS unlocks the AudioContext only from a synchronous in-gesture resume (compatibility.md §5).
     onFirstGesture: () => {
-      /* Audio area resumes the AudioContext here. */
+      void audio.unlock();
     },
   });
 
@@ -96,9 +134,11 @@ function main(): void {
   let paused = false;
   document.addEventListener('visibilitychange', () => {
     paused = document.hidden;
+    audio.onVisibilityChange(document.hidden); // quiesce when hidden; resume() on return (06 §3.2a)
   });
   window.addEventListener('pagehide', () => {
     paused = true;
+    audio.onVisibilityChange(true);
   });
 
   // Fixed-timestep loop; logic only ever sees a constant dt via stepLoop.

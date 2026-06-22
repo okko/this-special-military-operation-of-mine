@@ -97,15 +97,47 @@ test('tap starts a run; held fire sweeping the sky destroys a drone; release cea
   expect(downed).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
-test.fixme('audio context reaches "running" after the first gesture', () => {
-  // area 06 Audio
+test('audio context reaches "running" after the first gesture (area 06, §8.13)', async ({ page, browserName }) => {
+  // §8.13 scopes the unlock smoke to the WebKit/iPhone path — the iOS-critical case. browserName
+  // 'webkit' covers both the `webkit` and `mobile-webkit` projects. (Headless Firefox never transitions
+  // AudioContext on a synthetic gesture, and Chromium is not the documented target.)
+  test.skip(browserName !== 'webkit', 'unlock smoke targets the WebKit/iPhone path (§8.13)');
+
+  await page.goto('/');
+  const canvas = page.locator('#game');
+  await expect(canvas).toBeVisible();
+
+  // The context is created suspended; the first trusted tap (which also starts a run) must unlock it
+  // synchronously in the gesture handler — the iOS-critical path (docs/areas/06-audio.md §3.2).
+  await canvas.click({ position: { x: 40, y: 40 } });
+  await expect
+    .poll(() => page.evaluate(() => (window as Window & { __audio?: { state: string } }).__audio?.state), {
+      timeout: 5000,
+    })
+    .toBe('running');
 });
+
+test('HUD meter-icon row matches the committed snapshot per engine (area 10, §8.16)', async ({ page }) => {
+  await page.goto('/');
+  const canvas = page.locator('#game');
+  await expect(canvas).toBeVisible();
+
+  // Start a run so the HUD overlay renders, then snapshot IMMEDIATELY — before the first drone spawns —
+  // so only the static, procedural meter icons (😴🍞💧🚬💩) sit in the clipped column (no live bars/drones).
+  await canvas.click({ position: { x: 40, y: 40 } });
+  await page.waitForTimeout(120);
+
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error('canvas has no bounding box');
+  const scale = Math.round(box.width / 384); // integer-scaled (compatibility.md §2)
+  // Internal x:[0,13) is the icon column (bars start at x=14); y:[0,46) covers the five stacked icons.
+  const clip = { x: box.x, y: box.y, width: 13 * scale, height: 46 * scale };
+  await expect(page).toHaveScreenshot('hud-icon-row.png', { clip, maxDiffPixelRatio: 0.02 });
+});
+
 test.fixme('localStorage round-trips; in-memory fallback engages when storage throws', () => {
   // areas 07/08 (settings + highscores UI) exercising the persistence layer end-to-end
 });
 test.fixme('mobile-viewport run holds the frame-time budget under CPU throttling', () => {
   // area 01 Gameplay Engine (representative drone count)
-});
-test.fixme('HUD five-icon glyph row screenshot snapshot matches per engine', () => {
-  // area 10 HUD & UI + area 11 Art (final icon sprites)
 });

@@ -19,7 +19,10 @@ import { validateDrones } from './drones-validate';
 import { DRONES } from './drones';
 import { validateCombatBalance } from './balance-validate';
 import { combatBalance } from './balance';
+import { validateAudioContent } from './audio-validate';
+import { audioContent } from './audio';
 import type { AssetManifest } from './assets';
+import type { AudioContent } from './audio';
 import type { MeterBalance } from './meters';
 import type { ResidentDef, EconomyTunables } from './residents';
 import type { ScoringBalance } from './scoring';
@@ -35,6 +38,7 @@ export interface Content {
   incidents: { catalog: IncidentDef[]; scheduler: SchedulerTunables }; // area 05
   drones: DroneDef[]; // area 01 catalog
   combat: CombatBalance; // area 01 spawn/gun/scaling tunables
+  audio: AudioContent; // area 06 SFX/music/ducking tables
 }
 
 export function loadContent(raw: unknown): Content {
@@ -55,5 +59,6 @@ export function loadContent(raw: unknown): Content {
   };
   const drones = validateDrones(DRONES);
   const combat = validateCombatBalance(combatBalance);
-  return { manifest, meters, economy, scoring, incidents, drones, combat };
+  const audio = validateAudioContent(audioContent);
+  return { manifest, meters, economy, scoring, incidents, drones, combat, audio };
 }
