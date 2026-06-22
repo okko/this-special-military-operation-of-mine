@@ -7,6 +7,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
+  // Cap workers so the real-time gameplay smokes (e.g. §8.15) aren't starved by CPU over-subscription
+  // on many-core dev machines; their closed-loop aim needs steady frames. CI keeps a smaller pool.
+  workers: process.env.CI ? 2 : 4,
   reporter: process.env.CI ? 'github' : 'list',
   use: {
     baseURL: 'http://localhost:5173',

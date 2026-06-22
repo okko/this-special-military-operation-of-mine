@@ -108,7 +108,7 @@ export const combatBalance: CombatBalance = {
 
   aim: { swayFrequencyHz: 0.7, drunkFrequencyHz: 0.4, swayRadPerUnit: 0.12, drunkWobbleRad: 0.18 },
 
-  projectile: { speed: 320, ttl: 1.5, radius: 1.5, cap: 64, hitscan: false },
+  projectile: { speed: 420, ttl: 1.5, radius: 3.5, cap: 64, hitscan: false },
 
   spawn: {
     baseInterval: 1.6,

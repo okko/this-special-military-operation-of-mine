@@ -56,19 +56,20 @@ function run(seed: number): Summary {
   };
 }
 
-// Regenerated for the wave-director rework (§request): drones now arrive in waves and dive at
-// skyline towers. With the generic sweep-and-fire script the first wave's drones leak into the
-// towers (no kills), the wave clears within the 10s window, and the between-wave lull's passive
-// repair leaves the shared integrity fractional. Reviewed + updated deliberately (never auto-regen).
+// Regenerated for the wave-director rework + hittability balance pass (§request): drones now arrive in
+// waves and dive at skyline towers; projectiles are larger/faster and early drones slower so the gun
+// can actually defend. With the generic sweep-and-fire script the first wave now yields one kill before
+// the rest leak, and the lull's passive repair leaves the shared integrity fractional. The rng seed is
+// unchanged (the wave roll consumes the same rng) — only the sim outcome moved. Updated deliberately.
 const GOLDEN: Summary = {
   shiftSeconds: 10,
   difficulty: 1,
-  postIntegrity: 52.647,
-  dronesDowned: 0,
-  score: 49,
-  rubles: 0,
+  postIntegrity: 60.493,
+  dronesDowned: 1,
+  score: 149,
+  rubles: 1,
   drones: 0,
-  projectiles: 8,
+  projectiles: 5,
   rngSeed: 3356074071,
 };
 

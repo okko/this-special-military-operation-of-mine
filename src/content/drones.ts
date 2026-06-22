@@ -29,7 +29,7 @@ export const DRONES: DroneDef[] = [
     kind: 'scout', // fast straight dash; the bread-and-butter target
     spriteId: 'drone.scout',
     baseHp: 1,
-    baseSpeed: 72,
+    baseSpeed: 50,
     radius: 5,
     escapeDamage: 8,
     awardsRuble: true,
@@ -65,7 +65,7 @@ export const DRONES: DroneDef[] = [
     kind: 'frenzy', // fast weaver; killing it triggers Scoring bonus mode (scoring triggerKind)
     spriteId: 'drone.special',
     baseHp: 1,
-    baseSpeed: 64,
+    baseSpeed: 46,
     radius: 4,
     escapeDamage: 4,
     awardsRuble: true,

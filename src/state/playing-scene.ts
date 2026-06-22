@@ -169,6 +169,7 @@ export function createPlayingScene(opts: PlayingSceneOptions = {}): Scene {
       opts.audio?.setScene('Playing');
       opts.overlay?.setVisible(true);
       opts.view?.setVisible(true);
+      opts.view?.startIntro(); // opening fly-up from the ground floor to the rooftop post
     },
 
     update(dt: number): void {

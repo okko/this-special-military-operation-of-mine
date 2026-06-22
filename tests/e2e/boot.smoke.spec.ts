@@ -59,11 +59,17 @@ test('tap starts a run; held fire sweeping the sky destroys a drone; release cea
       return { downed: c?.dronesDowned ?? 0, aim: c?.aimAngle ?? 0, drones: c?.drones ?? [] };
     });
 
-  // Drones home to the post — which is the gun pivot — so each approaches on a CONSTANT bearing.
-  // Hold fire (Space) and use the keyboard to steer the barrel onto the farthest drone's bearing and
-  // hold it there: the tracer stream sits on that ray and the incoming drone walks into it. A simple
-  // closed loop on the observable aim angle (no pointer→world mapping, valid touch-only too).
+  // Drones now arrive in waves and dive at skyline towers spread across the sky, so they no longer share
+  // one bearing. Competent keyboard play: LOCK onto one drone (focus fire) — follow it between reads and
+  // steer the barrel onto its bearing with fire held; the tracer sits on that ray and the drone walks
+  // into it. A closed loop on the observable aim angle (no pointer→world mapping; valid touch-only too).
   const PIVOT = { x: 192, y: 196 };
+  const norm = (a: number): number => {
+    let d = a;
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    return d;
+  };
   let kd = false;
   let ka = false;
   const setKeys = async (wantD: boolean, wantA: boolean): Promise<void> => {
@@ -75,23 +81,34 @@ test('tap starts a run; held fire sweeping the sky destroys a drone; release cea
 
   await page.keyboard.down('Space');
   let downed = 0;
-  for (let i = 0; i < 220 && downed === 0; i++) {
+  let lock: { x: number; y: number } | null = null; // commit to one drone (focus fire) until it's gone
+  for (let i = 0; i < 320 && downed === 0; i++) {
     const s = await readState();
     downed = s.downed;
     if (downed > 0) break;
-    const target = s.drones.reduce<{ x: number; y: number } | null>((far, d) => {
-      const r = Math.hypot(d.x - PIVOT.x, d.y - PIVOT.y);
-      return !far || r > Math.hypot(far.x - PIVOT.x, far.y - PIVOT.y) ? d : far;
-    }, null);
-    if (target) {
-      const bearing = Math.atan2(target.y - PIVOT.y, target.x - PIVOT.x);
-      let diff = bearing - s.aim;
-      while (diff > Math.PI) diff -= 2 * Math.PI;
-      while (diff < -Math.PI) diff += 2 * Math.PI;
-      if (Math.abs(diff) < 0.05) await setKeys(false, false);
+    // Follow the locked drone (nearest to its last position); otherwise acquire the closest-bearing one.
+    if (lock) {
+      let near: { x: number; y: number; d: number } | null = null;
+      for (const d of s.drones) {
+        const dist = Math.hypot(d.x - lock.x, d.y - lock.y);
+        if (!near || dist < near.d) near = { x: d.x, y: d.y, d: dist };
+      }
+      lock = near && near.d < 60 ? { x: near.x, y: near.y } : null;
+    }
+    if (!lock && s.drones.length > 0) {
+      let best: { x: number; y: number; ad: number } | null = null;
+      for (const d of s.drones) {
+        const ad = Math.abs(norm(Math.atan2(d.y - PIVOT.y, d.x - PIVOT.x) - s.aim));
+        if (!best || ad < best.ad) best = { x: d.x, y: d.y, ad };
+      }
+      lock = best ? { x: best.x, y: best.y } : null;
+    }
+    if (lock) {
+      const diff = norm(Math.atan2(lock.y - PIVOT.y, lock.x - PIVOT.x) - s.aim);
+      if (Math.abs(diff) < 0.03) await setKeys(false, false);
       else await setKeys(diff > 0, diff < 0);
     }
-    await page.waitForTimeout(40);
+    await page.waitForTimeout(30);
   }
   await setKeys(false, false);
   await page.keyboard.up('Space'); // release ceases fire — the gun never sticks
