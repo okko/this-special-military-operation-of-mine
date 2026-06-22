@@ -110,23 +110,27 @@ export function createThreeView(canvas: HTMLCanvasElement, content: Content): Th
   sunSprite.position.set(40, ROOF_Y + 26, -120);
   scene.add(sunSprite);
 
-  // Ground haze plane (reads as the distant city floor).
+  // Ground: every tower stands on world Y = GROUND_Y. The skyline + the soldier's tower share it, so
+  // nothing sits underground (drones/the gun still map ABOVE it via ay()).
+  const GROUND_Y = 0;
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(600, 200),
+    new THREE.PlaneGeometry(800, 400),
     new THREE.MeshStandardMaterial({ color: col('ink') }),
   );
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(0, ay(content.combat.skyline.groundY), -40);
+  ground.position.set(0, GROUND_Y, -20);
   scene.add(ground);
 
   // ---- Far layer: damageable Moscow skyline -------------------------------------------------
+  // Towers rise from the ground to the world-Y the drones dive at (ay of each building's roof), so a
+  // diving drone meets the tower top and the whole thing reads as one grounded skyline.
   const skylineGroup = new THREE.Group();
   scene.add(skylineGroup);
   const towers: SkylineTower[] = [];
   const windowGeo = new THREE.PlaneGeometry(0.5, 0.5);
   for (const b of content.combat.skyline.buildings) {
-    const baseY = ay(content.combat.skyline.groundY);
-    const slabH = (b.height * AS) / b.stories;
+    const roofY = ay(content.combat.skyline.groundY - b.height); // world height (drones target this)
+    const slabH = (roofY - GROUND_Y) / b.stories;
     const w = b.width * AS;
     const slabs: THREE.Mesh[] = [];
     const body = col(b.id % 2 === 0 ? 'concrete' : 'concreteDk');
@@ -135,7 +139,7 @@ export function createThreeView(canvas: HTMLCanvasElement, content: Content): Th
         new THREE.BoxGeometry(w, slabH * 0.96, w * 0.7),
         new THREE.MeshStandardMaterial({ color: body, flatShading: true }),
       );
-      slab.position.set(ax(b.x), baseY + slabH * (s + 0.5), SKYLINE_Z);
+      slab.position.set(ax(b.x), GROUND_Y + slabH * (s + 0.5), SKYLINE_Z);
       // Lit windows on the camera-facing side (emissive so night reads).
       const win = new THREE.Mesh(
         windowGeo,
@@ -155,10 +159,11 @@ export function createThreeView(canvas: HTMLCanvasElement, content: Content): Th
   scene.add(towerGroup);
   const TW = 60 * AS; // tower footprint width
   const TD = 26 * AS; // depth
-  // The tower hangs DOWN from the roof: roof (floor 32) sits at ROOF_Y where the gun is, and the 32
-  // storeys descend to the base. (Earlier this was rooted at ground level, which put the gun — and the
-  // soldier — on the ground floor with the tower rising above; the soldier must stand on the ROOF.)
-  const towerBaseY = ROOF_Y - 32 * STORY_H;
+  // The tower stands ON the ground (base at GROUND_Y) and rises 32 storeys to the roof at ROOF_Y, where
+  // the gun is. Floor 32's ceiling IS the roof deck; the soldier stands on top of it (storey 33), in the
+  // open — not inside the building. (ROOF_Y == 32·STORY_H, so the base lands exactly on the ground.)
+  const towerBaseY = GROUND_Y;
+  const ROOF_DECK_Y = towerBaseY + 32 * STORY_H; // == ROOF_Y
   const towerX = ax(ARENA_CX);
   // Back + side walls (front omitted → the cut-away reveals the floors).
   const wallMat = new THREE.MeshStandardMaterial({ color: col('concreteDk'), flatShading: true });
@@ -202,15 +207,33 @@ export function createThreeView(canvas: HTMLCanvasElement, content: Content): Th
     }
   }
 
-  // ---- The gun + soldier on the roof --------------------------------------------------------
+  // Roof deck capping floor 32 (the rooftop the soldier stands on) + a low sandbag parapet.
+  const roofDeck = new THREE.Mesh(
+    new THREE.BoxGeometry(TW, 0.4, TD),
+    new THREE.MeshStandardMaterial({ color: col('concrete'), flatShading: true }),
+  );
+  roofDeck.position.set(towerX, ROOF_DECK_Y + 0.2, TOWER_Z);
+  towerGroup.add(roofDeck);
+  const parapetMat = new THREE.MeshStandardMaterial({ color: col('uniformDk'), flatShading: true });
+  for (const [dx, dz, w, d] of [
+    [0, -TD / 2, TW, 0.25],
+    [-TW / 2, 0, 0.25, TD],
+    [TW / 2, 0, 0.25, TD],
+  ] as const) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(w, 0.9, d), parapetMat);
+    rail.position.set(towerX + dx, ROOF_DECK_Y + 0.6, TOWER_Z + dz);
+    towerGroup.add(rail);
+  }
+
+  // ---- The gun + soldier ON the roof deck (storey 33, in front of the tower) ------------------
   const gunPivot = new THREE.Group();
-  gunPivot.position.set(ax(content.combat.gun.pivot.x), ROOF_Y, ACTION_Z);
+  gunPivot.position.set(ax(content.combat.gun.pivot.x), ROOF_DECK_Y + 0.9, ACTION_Z);
   scene.add(gunPivot);
   const soldier = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.5, 1.1, 4, 8),
+    new THREE.CapsuleGeometry(0.55, 1.3, 4, 8),
     new THREE.MeshStandardMaterial({ color: col('uniform'), flatShading: true }),
   );
-  soldier.position.set(-0.6, 0.4, 0);
+  soldier.position.set(-0.7, 0.5, 0);
   gunPivot.add(soldier);
   const barrel = new THREE.Mesh(
     new THREE.CylinderGeometry(0.18, 0.18, 2.4, 8),
@@ -252,10 +275,10 @@ export function createThreeView(canvas: HTMLCanvasElement, content: Content): Th
   }
 
   // ---- Camera poses -------------------------------------------------------------------------
-  // Behind + above the soldier, looking up and out over the rooftop at the sky/skyline: the gun sits
-  // in the lower-centre foreground (in front of the tower), drones fill the upper frame.
-  const shootEye = new THREE.Vector3(0, ROOF_Y + 5, 22);
-  const shootLook = new THREE.Vector3(0, ROOF_Y + 9, -8);
+  // High + behind the soldier, looking down-and-forward over the rooftop post: the soldier on his roof
+  // sits in the foreground, the grounded Moscow skyline fills the mid-frame, drones dive from the sky.
+  const shootEye = new THREE.Vector3(0, ROOF_Y + 11, 30);
+  const shootLook = new THREE.Vector3(0, ROOF_Y - 4, -14);
   aimCamera.position.copy(shootEye);
   aimCamera.lookAt(shootLook);
 
@@ -264,10 +287,10 @@ export function createThreeView(canvas: HTMLCanvasElement, content: Content): Th
   let cssW = 1;
   let cssH = 1;
 
-  // Opening fly-up: a low shot looking up the cut-away tower from the base, panning to the rooftop post.
+  // Opening fly-up: a low shot at the tower's ground floor, craning up the cut-away to the rooftop post.
   const INTRO_DUR = 2.6;
-  const introEye = new THREE.Vector3(towerX, towerBaseY + 2.5, TOWER_Z + 16);
-  const introLook = new THREE.Vector3(towerX, towerBaseY + 5, TOWER_Z);
+  const introEye = new THREE.Vector3(towerX, GROUND_Y + 3, TOWER_Z + 22);
+  const introLook = new THREE.Vector3(towerX, GROUND_Y + 13, TOWER_Z);
   let introT = 1; // 1 = finished; startIntro() resets to 0
   // Smoothed camera lerp factor: 0 = shooting, 1 = interior.
   let camT = 0;
