@@ -6,6 +6,17 @@
 import type { Vec2 } from './math';
 import type { MeterKey } from '../types/meter-key';
 
+/**
+ * The HUD → Economy player-interaction contract (docs/areas/10-hud-ui.md §3.5). The HUD emits one of
+ * these when the player confirms a resident-panel option; the Engine consumes it and routes to the
+ * Economy `buyService`/`begFavor` flows. `closePanel` is a HUD-internal UI action carried on the bus
+ * for a single intent surface; the Engine ignores it.
+ */
+export type ResidentIntent =
+  | { kind: 'buyService'; residentId: string; serviceId: string }
+  | { kind: 'begFavor'; residentId: string; favorId: string }
+  | { kind: 'closePanel' };
+
 export interface GameEvents {
   droneSpawned: { id: number; kind: string };
   // `colorTag` (optional) marks a "special" coloured drone for the Scoring jackpot sequence
@@ -35,6 +46,8 @@ export interface GameEvents {
   // Extends the architecture §5 baseline ({score, cause}) with the run stats the persistence
   // layer needs to build a RunSummary on game over (Gameplay Engine, area 01, supplies them).
   gameOver: { score: number; cause: string; shiftSeconds: number; dronesDowned: number };
+  // HUD → Economy player interaction (docs/areas/10-hud-ui.md §3.5). Additive, lead-approved.
+  residentIntent: ResidentIntent;
 }
 
 export type Handler<T> = (payload: T) => void;

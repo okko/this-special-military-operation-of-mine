@@ -26,6 +26,7 @@ export interface Settings {
     reducedFlash: boolean;
     reducedMotion: boolean; // added for the Art area (overlay/animation gating)
     largeHud: boolean;
+    pauseWhilePanelOpen: boolean; // HUD area: freeze the sim while the resident panel is open (10 §3.5)
   };
 }
 
@@ -52,8 +53,14 @@ export const DEFAULT_SETTINGS: Settings = {
   musicVolume: 0.6,
   sfxVolume: 0.8,
   muted: false,
-  bindings: { rotateLeft: 'KeyA', rotateRight: 'KeyD', fire: 'Space' },
-  accessibility: { highContrast: false, reducedFlash: false, reducedMotion: false, largeHud: false },
+  bindings: { rotateLeft: 'KeyA', rotateRight: 'KeyD', fire: 'Space', residentPanel: 'KeyE' },
+  accessibility: {
+    highContrast: false,
+    reducedFlash: false,
+    reducedMotion: false,
+    largeHud: false,
+    pauseWhilePanelOpen: false,
+  },
 };
 
 export const DEFAULT_META: MetaStats = {

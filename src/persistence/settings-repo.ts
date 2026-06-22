@@ -38,6 +38,7 @@ function coerce(raw: unknown): Settings {
       reducedFlash: bool(acc.reducedFlash, base.accessibility.reducedFlash),
       reducedMotion: bool(acc.reducedMotion, base.accessibility.reducedMotion),
       largeHud: bool(acc.largeHud, base.accessibility.largeHud),
+      pauseWhilePanelOpen: bool(acc.pauseWhilePanelOpen, base.accessibility.pauseWhilePanelOpen),
     },
   };
 }
