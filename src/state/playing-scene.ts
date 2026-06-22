@@ -24,6 +24,7 @@ import type { SpriteId } from '../content/sprite-ids';
 import type { DifficultyRamp } from '../core/difficulty';
 import { daylightAt } from '../core/difficulty';
 import { drawSkyline } from '../render/backdrop';
+import { drawIncidentOverlays } from '../render/overlays';
 import type { GameState } from './game-state';
 import type { Vec2 } from '../core/math';
 
@@ -149,7 +150,8 @@ export function createPlayingScene(opts: PlayingSceneOptions = {}): Scene {
         r.drawSprite('gun.flash', { x: mx, y: my }, { frame, rotation: c.aim.effectiveAngle });
       }
 
-      // The real HUD overlay (area 10) draws on top.
+      // Incident overlays (blackout/drip) darken the world; the HUD draws on top, still readable.
+      drawIncidentOverlays(r, gs);
       hud?.render(r, gs);
     },
 
