@@ -32,8 +32,10 @@ function spawnDroneAt(
   combat: CombatState,
   pos: { x: number; y: number },
   hp: number,
-  opts: { kind?: string; awardsRuble?: boolean; escapeDamage?: number } = {},
+  opts: { kind?: string; awardsRuble?: boolean; escapeDamage?: number; target?: { x: number; y: number }; buildingId?: number } = {},
 ): Drone {
+  // Default target is far below so the drone does NOT escape unless the test opts into a target at pos.
+  const target = opts.target ?? { x: pos.x, y: pos.y + 400 };
   const d: Drone = {
     id: combat.nextDroneId++,
     kind: opts.kind ?? 'scout',
@@ -42,9 +44,10 @@ function spawnDroneAt(
     hp,
     maxHp: hp,
     radius: 8,
-    movement: { kind: 'straight', speed: 0, origin: { ...pos }, target: { x: pos.x, y: pos.y + 400 }, amplitude: 0, frequency: 0, phase: 0, accel: 0, elapsed: 0 },
+    movement: { kind: 'straight', speed: 0, origin: { ...pos }, target: { ...target }, amplitude: 0, frequency: 0, phase: 0, accel: 0, elapsed: 0 },
     escapeDamage: opts.escapeDamage ?? 10,
     awardsRuble: opts.awardsRuble ?? true,
+    ...(opts.buildingId !== undefined ? { targetBuildingId: opts.buildingId } : {}),
   };
   combat.drones.push(d);
   return d;
@@ -91,22 +94,28 @@ describe('combat: kills, escapes, and loss (§8.4-§8.8)', () => {
     expect(combat.drones).toHaveLength(0);
   });
 
-  it('a drone reaching the post emits droneEscaped and damages Post Integrity (§8.6)', () => {
+  it('a drone reaching its target tower emits droneEscaped{buildingId}, damages Post Integrity + cuts the tower (§8.6)', () => {
     const { ctx, combat } = setup();
-    const escaped = capture<{ damage: number }>(ctx, 'droneEscaped');
-    spawnDroneAt(combat, { ...combatBalance.postTarget }, 3, { escapeDamage: 18 });
+    const escaped = capture<{ damage: number; buildingId?: number }>(ctx, 'droneEscaped');
+    const damaged = capture<{ buildingId: number }>(ctx, 'buildingDamaged');
+    const target = { ...combatBalance.postTarget };
+    spawnDroneAt(combat, target, 3, { escapeDamage: 18, target, buildingId: 4 });
     updateCombat(combat, 1 / 60, ctx, tickInput());
     expect(escaped).toHaveLength(1);
-    expect(escaped[0]).toMatchObject({ damage: 18 });
+    expect(escaped[0]).toMatchObject({ damage: 18, buildingId: 4 });
     expect(combat.postIntegrity).toBe(combatBalance.postIntegrityMax - 18);
     expect(combat.drones).toHaveLength(0);
+    // The targeted tower was visibly cut.
+    expect(damaged[0]?.buildingId).toBe(4);
+    expect(combat.skyline.buildings.find((b) => b.id === 4)?.cut).toBeGreaterThan(0);
   });
 
   it('Post Integrity reaching 0 emits exactly one gameOver and halts the sim (§8.7)', () => {
     const { ctx, combat } = setup();
     const go = capture<{ cause: string; score: number }>(ctx, 'gameOver');
     combat.postIntegrity = 10;
-    spawnDroneAt(combat, { ...combatBalance.postTarget }, 3, { escapeDamage: 50 });
+    const target = { ...combatBalance.postTarget };
+    spawnDroneAt(combat, target, 3, { escapeDamage: 50, target, buildingId: 4 });
     updateCombat(combat, 1 / 60, ctx, tickInput({ score: 1234 }));
     expect(go).toHaveLength(1);
     expect(go[0]).toMatchObject({ cause: 'post-destroyed', score: 1234 });

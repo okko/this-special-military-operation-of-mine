@@ -5,22 +5,38 @@ import { combatBalance } from '../../content/balance';
 import { DEFAULT_FLAGS } from '../incidents';
 import type { IncidentFlags } from '../../state/game-state';
 import { createCombatState } from './combat';
-import { stepSpawns, effectiveSpawnInterval, concurrentCap, candidateDefs } from './director';
+import { stepWaves, waveSize, effectiveSpawnInterval, concurrentCap, candidateDefs } from './director';
 import type { SpawnCommand } from './types';
 
 function flags(over: Partial<IncidentFlags> = {}): IncidentFlags {
   return { ...DEFAULT_FLAGS, ...over };
 }
 
-/** Drive the pure spawn step over a dt sequence; drones are never materialized so the cap never bites. */
-function runSpawns(seed: number, D: number, seconds: number, over: Partial<IncidentFlags> = {}, dt = 0.1): SpawnCommand[] {
+interface WaveLog {
+  sirens: { waveIndex: number; secondsUntil: number }[];
+  starts: { waveIndex: number }[];
+  clears: { waveIndex: number }[];
+  commands: SpawnCommand[];
+}
+
+/**
+ * Drive the pure wave step over a dt sequence. Drones are never materialized into `combat.drones`, so
+ * each wave "clears" as soon as its burst is fully launched — letting one run cover several waves.
+ */
+function runWaves(seed: number, D: number, seconds: number, over: Partial<IncidentFlags> = {}, dt = 0.1): WaveLog {
   const content = createTestContent();
   const rng = createRng(seed);
   const combat = createCombatState(content);
   const f = flags(over);
-  const out: SpawnCommand[] = [];
-  for (let t = 0; t < seconds; t += dt) out.push(...stepSpawns(combat, dt, D, rng, content, f));
-  return out;
+  const log: WaveLog = { sirens: [], starts: [], clears: [], commands: [] };
+  for (let t = 0; t < seconds; t += dt) {
+    const r = stepWaves(combat, dt, D, rng, content, f);
+    if (r.siren) log.sirens.push(r.siren);
+    if (r.started) log.starts.push(r.started);
+    if (r.cleared) log.clears.push(r.cleared);
+    log.commands.push(...r.commands);
+  }
+  return log;
 }
 
 describe('director: scaling helpers (§8.2)', () => {
@@ -44,28 +60,58 @@ describe('director: scaling helpers (§8.2)', () => {
     expect(low).not.toContain('decoy_bird');
     expect(candidateDefs(0, content.drones, flags({ decoysActive: true })).map((d) => d.kind)).toContain('decoy_bird');
   });
+
+  it('waveSize grows linearly with the wave index, clamped to the max', () => {
+    expect(waveSize(1, combatBalance)).toBe(combatBalance.waves.baseWaveSize);
+    expect(waveSize(2, combatBalance)).toBe(combatBalance.waves.baseWaveSize + combatBalance.waves.waveSizePerWave);
+    expect(waveSize(9999, combatBalance)).toBe(combatBalance.waves.maxWaveSize);
+  });
 });
 
-describe('director: spawn stream (§8.1, §8.2)', () => {
-  it('determinism: same seed + D + dt sequence ⇒ identical SpawnCommand[]', () => {
-    expect(runSpawns(42, 5, 60)).toEqual(runSpawns(42, 5, 60));
+describe('director: wave cadence (§request)', () => {
+  it('determinism: same seed + D + dt sequence ⇒ identical wave log', () => {
+    expect(runWaves(42, 5, 300)).toEqual(runWaves(42, 5, 300));
   });
 
-  it('different seeds produce different streams', () => {
-    expect(runSpawns(1, 5, 60)).not.toEqual(runSpawns(2, 5, 60));
+  it('different seeds produce different command streams', () => {
+    expect(runWaves(1, 5, 60).commands).not.toEqual(runWaves(2, 5, 60).commands);
   });
 
-  it('higher D yields more spawns and a mix shifted toward harder kinds', () => {
-    const low = runSpawns(7, 0, 60);
-    const high = runSpawns(7, 12, 60);
-    expect(high.length).toBeGreaterThan(low.length);
-    expect(new Set(low.map((c) => c.kind)).has('kamikaze')).toBe(false);
-    expect(new Set(high.map((c) => c.kind)).has('kamikaze')).toBe(true);
+  it('a siren precedes every wave; the first wave launches after the short opening lull', () => {
+    const log = runWaves(7, 4, 300);
+    expect(log.starts.length).toBeGreaterThanOrEqual(2);
+    expect(log.sirens.length).toBe(log.starts.length); // one siren per wave
+    expect(log.starts[0]?.waveIndex).toBe(1);
+    expect(log.starts[1]?.waveIndex).toBe(2);
+    // The siren ahead of a full-length lull fires ~sirenLeadSeconds early (wave 2+).
+    expect(log.sirens[1]?.secondsUntil ?? 0).toBeGreaterThan(combatBalance.waves.sirenLeadSeconds - 1);
   });
 
-  it('an incident spawn-rate multiplier increases the spawn count', () => {
-    const normal = runSpawns(9, 4, 60);
-    const swarmed = runSpawns(9, 4, 60, { spawnRateMultiplier: 3 });
-    expect(swarmed.length).toBeGreaterThan(normal.length);
+  it('later waves launch more drones than earlier ones', () => {
+    const content = createTestContent();
+    const rng = createRng(7);
+    const combat = createCombatState(content);
+    const f = flags();
+    const perWave = new Map<number, number>();
+    let current = 0;
+    for (let t = 0; t < 320; t += 0.1) {
+      const r = stepWaves(combat, 0.1, 4, rng, content, f);
+      if (r.started) current = r.started.waveIndex;
+      if (r.commands.length) perWave.set(current, (perWave.get(current) ?? 0) + r.commands.length);
+    }
+    expect(perWave.get(1)).toBe(waveSize(1, content.combat));
+    expect(perWave.get(2) ?? 0).toBeGreaterThan(perWave.get(1) ?? 0);
+  });
+
+  it('every spawned drone targets a real skyline building', () => {
+    const content = createTestContent();
+    const ids = new Set(content.combat.skyline.buildings.map((b) => b.id));
+    for (const cmd of runWaves(11, 6, 200).commands) expect(ids.has(cmd.targetBuildingId)).toBe(true);
+  });
+
+  it('an incident spawn-rate multiplier enlarges the wave', () => {
+    const normal = runWaves(9, 4, 40).commands.length;
+    const swarmed = runWaves(9, 4, 40, { spawnRateMultiplier: 3 }).commands.length;
+    expect(swarmed).toBeGreaterThan(normal);
   });
 });

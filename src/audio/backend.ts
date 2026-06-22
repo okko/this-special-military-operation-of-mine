@@ -25,6 +25,7 @@ export const SFX_IDS = [
   'jackpot',
   'comboUp',
   'incidentAlarm',
+  'airRaidSiren',
   'gameOver',
   'uiSelect',
   'uiConfirm',

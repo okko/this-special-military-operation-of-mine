@@ -67,6 +67,7 @@ export const audioContent: AudioContent = {
     jackpot: { src: 'sfx/jackpot.ogg', gain: 0.5, maxVoices: 2, fallbackTone: sfxTone(1047, 400, 'square', 0.5) },
     comboUp: { src: 'sfx/combo-up.ogg', gain: 0.35, maxVoices: 4, fallbackTone: sfxTone(660, 120, 'triangle', 0.35) },
     incidentAlarm: { src: 'sfx/incident-alarm.ogg', gain: 0.45, maxVoices: 2, fallbackTone: sfxTone(330, 500, 'square', 0.45) },
+    airRaidSiren: { src: 'sfx/air-raid-siren.ogg', gain: 0.5, maxVoices: 1, rateLimitMs: 4000, fallbackTone: sfxTone(440, 1400, 'sawtooth', 0.5) },
     gameOver: { src: 'sfx/game-over.ogg', gain: 0.5, maxVoices: 1, fallbackTone: sfxTone(130, 900, 'sawtooth', 0.5) },
     uiSelect: { src: 'sfx/ui-select.ogg', gain: 0.25, maxVoices: 3, rateLimitMs: 40, fallbackTone: sfxTone(520, 40, 'square', 0.25) },
     uiConfirm: { src: 'sfx/ui-confirm.ogg', gain: 0.3, maxVoices: 3, fallbackTone: sfxTone(700, 90, 'triangle', 0.3) },

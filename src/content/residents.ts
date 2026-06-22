@@ -58,7 +58,7 @@ export const RESIDENTS: ResidentDef[] = [
   {
     id: 'babushka',
     name: 'Galina Petrovna',
-    floor: 3,
+    floor: 25,
     personality: 'Warm and terrifying in equal measure; feeds you like her own and will not hear no.',
     services: [
       { id: 'stew', label: "Babushka's Famous Stew", basePrice: 4, tags: [], relief: { meter: 'hunger', amount: 45 } },
@@ -83,7 +83,7 @@ export const RESIDENTS: ResidentDef[] = [
   {
     id: 'plumber',
     name: 'Sergei the Plumber',
-    floor: 7,
+    floor: 27,
     personality: 'A gloomy realist who has seen every pipe in the building fail at least twice.',
     services: [
       { id: 'toilet', label: 'Use the Good Bathroom', basePrice: 3, tags: ['toilet'], relief: { meter: 'poo', amount: 60 } },
@@ -102,7 +102,7 @@ export const RESIDENTS: ResidentDef[] = [
   {
     id: 'oligarch',
     name: 'Mr. Volkov',
-    floor: 22,
+    floor: 32,
     personality: 'Penthouse smile, generous for the audience; every kindness is an investment.',
     services: [
       { id: 'water', label: 'Imported Mineral Water', basePrice: 5, tags: [], relief: { meter: 'thirst', amount: 50 } },
@@ -122,7 +122,7 @@ export const RESIDENTS: ResidentDef[] = [
   {
     id: 'veteran',
     name: 'Old Dmitri',
-    floor: 5,
+    floor: 23,
     // Compliance watch-item: the army used him up and threw him away. Vodka is how he copes; his
     // pep talks are bitter solidarity with a fellow conscript. The target is the institution.
     personality: 'Grizzled and gentle with you, bitter at the army that spent his years and gave back a bad knee.',
@@ -150,7 +150,7 @@ export const RESIDENTS: ResidentDef[] = [
   {
     id: 'chef',
     name: 'Anya from the Café Below',
-    floor: 1,
+    floor: 21,
     personality: 'Bubbly and quick; runs the little café and sends food up when the lift cooperates.',
     services: [
       { id: 'pelmeni', label: 'A Bowl of Hot Pelmeni', basePrice: 5, tags: ['delivery'], relief: { meter: 'hunger', amount: 55 } },
@@ -169,10 +169,11 @@ export const RESIDENTS: ResidentDef[] = [
   {
     id: 'mechanic',
     name: 'Iron Lyuba',
-    floor: 9,
+    floor: 29,
     personality: 'Brusque and unbeatable with a wrench; fixes what the building breaks, for a price.',
     services: [
       { id: 'clearjam', label: 'Clear That Jam, Soldier', basePrice: 4, tags: ['gun'] }, // no meter relief; Engine clears the jam
+      { id: 'patch', label: 'Patch Up the Block', basePrice: 7, tags: ['repair'] }, // no meter relief; Engine repairs the skyline
       { id: 'sparesmoke', label: 'A Spare Cigarette', basePrice: 2, tags: [], relief: { meter: 'vice', amount: 40 } },
     ],
     favors: [
@@ -187,7 +188,7 @@ export const RESIDENTS: ResidentDef[] = [
   {
     id: 'student',
     name: 'Kostya Upstairs',
-    floor: 14,
+    floor: 30,
     personality: 'An anxious insomniac who never sleeps and always has something fizzy or smokable.',
     services: [
       {
@@ -212,7 +213,7 @@ export const RESIDENTS: ResidentDef[] = [
   {
     id: 'priest',
     name: 'Father Pavel',
-    floor: 11,
+    floor: 31,
     personality: 'Serene to the point of ominous; offers counsel, water, and a quiet place to breathe.',
     services: [
       { id: 'confession', label: 'A Quiet Confession', basePrice: 2, tags: [], relief: { meter: 'sleep', amount: 15 } },

@@ -22,10 +22,23 @@ export interface GameEvents {
   // `colorTag` (optional) marks a "special" coloured drone for the Scoring jackpot sequence
   // (docs/areas/04-scoring.md §3.3); ordinary drones omit it. Additive, lead-approved.
   droneDestroyed: { id: number; kind: string; byPlayer: boolean; pos: Vec2; colorTag?: string };
-  droneEscaped: { id: number; damage: number }; // hit the building
+  // A missed drone reaches its target skyscraper. `buildingId` (additive, lead-approved) tells the
+  // Render layer which building to visibly cut; `damage` decrements the shared post integrity as before.
+  droneEscaped: { id: number; damage: number; buildingId?: number };
   shotFired: { from: Vec2; angle: number };
-  // Opens the Scoring skill-shot window at the start of a wave (docs/areas/04-scoring.md §3.5).
+  // Opens the Scoring skill-shot window at the start of a wave (docs/areas/04-scoring.md §3.5). Emitted
+  // by the wave director when a wave goes active (one per wave).
   waveStarted: Record<string, never>;
+  // Wave cadence (drones arrive in waves, ≥2 min apart). `airRaidSiren` fires ~10s before a wave so the
+  // player can take cover / wrap up a resident visit; `waveCleared` fires when a wave's drones are gone
+  // and the between-wave lull (passive skyline repair) begins. Additive, lead-approved.
+  airRaidSiren: { waveIndex: number; secondsUntil: number };
+  waveCleared: { waveIndex: number };
+  // Skyline damage/repair spectacle hooks for the Render layer (docs/areas/11). `buildingDamaged` is
+  // emitted when a leaked drone cuts slabs off a tower; `buildingRepaired` when slabs are restored
+  // (passive lull regrow or a paid resident patch-up). Render-only; no gameplay system must depend on them.
+  buildingDamaged: { buildingId: number; cut: number; damage: number };
+  buildingRepaired: { buildingId: number; cut: number };
   rublesChanged: { delta: number; total: number };
   meterCrisis: { meter: MeterKey; entered: boolean };
   serviceBought: { residentId: string; service: string; cost: number };

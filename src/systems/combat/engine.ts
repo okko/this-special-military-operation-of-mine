@@ -20,7 +20,7 @@ import { updateScoring, registerScoring } from '../scoring';
 import { difficultyAt, phaseAt } from '../../core/difficulty';
 import type { SystemContext } from '../../core/system-context';
 import type { GameState } from '../../state/game-state';
-import { updateCombat, setJam, clearJam } from './combat';
+import { updateCombat, setJam, clearJam, repairSkyline } from './combat';
 import { deriveAimModifier } from './gun';
 import { IDLE_INTENT } from './types';
 import type { PlayerIntent } from './types';
@@ -63,6 +63,12 @@ export function createEngine(gs: GameState, ctx: SystemContext): Engine {
       gs.economy = res.value;
       const svc = roster.find((r) => r.id === intent.residentId)?.services.find((s) => s.id === intent.serviceId);
       if (svc?.tags.includes('gun')) clearJam(gs.combat);
+      // A 'repair'-tagged service patches the skyline (restores integrity + reverts cut slabs).
+      if (svc?.tags.includes('repair')) {
+        repairSkyline(gs.combat, ctx.content.combat, (id, cut) =>
+          ctx.events.emit('buildingRepaired', { buildingId: id, cut }),
+        );
+      }
     } else if (intent.kind === 'begFavor') {
       const res = begFavor(gs.economy, intent.residentId, intent.favorId, econCtx);
       if (!res.ok) return;

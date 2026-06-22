@@ -128,6 +128,7 @@ export interface Drone {
   escapeDamage: number;
   awardsRuble: boolean; // false for decoy_bird
   colorTag?: string; // jackpot letter, if the director tagged this drone
+  targetBuildingId?: number; // skyline building this drone dives at (undefined for wander decoys)
 }
 
 export interface Projectile {
@@ -158,12 +159,47 @@ export interface SpawnDirectorState {
   override: { spawnMultiplier: number; queuedBoss: boolean } | null;
 }
 
+/**
+ * A damageable Moscow-skyline tower (the drones' targets). `cut` is how many slabs have been sheared
+ * off the top (a float so passive repair can regrow smoothly; the Render layer floors it). `damage` is
+ * the raw escape-damage this tower has soaked — a Render-only intensity, distinct from the shared
+ * `postIntegrity` that drives game-over. The soldier's own (foreground) tower is NOT in this list — it
+ * is a view-only cut-away and is never a drone target (the soldier is not the target; §request).
+ */
+export interface BuildingState {
+  id: number;
+  x: number; // arena-space centre x
+  width: number;
+  height: number; // arena-space height (px); roof top = groundY - height
+  stories: number; // total destructible slabs
+  cut: number; // slabs currently sheared off the top, 0..stories (float)
+  damage: number; // cumulative escape-damage soaked (render intensity only)
+}
+
+export interface SkylineState {
+  groundY: number; // arena-space y the towers stand on
+  buildings: BuildingState[];
+}
+
+/** Wave lifecycle: drones arrive in spaced waves with a pre-wave air-raid siren (§request). */
+export type WavePhase = 'lull' | 'siren' | 'active';
+
+export interface WaveState {
+  index: number; // waves started so far (0 before the first); the active/just-finished wave number
+  phase: WavePhase;
+  timer: number; // seconds left in the current lull/siren countdown (unused while 'active')
+  toSpawn: number; // drones still to launch in the active wave
+  spawnTimer: number; // countdown to the next in-wave spawn
+}
+
 export interface CombatState {
   drones: Drone[];
   projectiles: Projectile[];
   gun: GunState;
   aim: { desiredAngle: number; effectiveAngle: number };
-  postIntegrity: number; // 0..100, starts at max
+  postIntegrity: number; // 0..100, starts at max — the shared game-over integrity (sum of all hits)
+  skyline: SkylineState; // damageable towers; cuts mirror accumulated hits, repaired in the lull
+  waves: WaveState; // wave cadence + pre-wave siren
   director: SpawnDirectorState;
   nextDroneId: number;
   nextProjectileId: number;

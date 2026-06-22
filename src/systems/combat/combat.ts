@@ -6,14 +6,31 @@
  * `player.rubles += 1` predates the immutable economy slice).
  */
 import type { SystemContext } from '../../core/system-context';
-import type { CombatState, IncidentFlags, Drone } from '../../state/game-state';
+import type { CombatBalance } from '../../content/balance';
+import type { BuildingState, CombatState, IncidentFlags, Drone, SkylineState } from '../../state/game-state';
 import type { AimModifier, PlayerIntent } from './types';
 import { updateGun } from './gun';
-import { stepSpawns, effectiveSpawnInterval } from './director';
+import { stepWaves } from './director';
 import { materialize, advanceDrone, reachedTarget, offArena } from './drone';
 import { sweptHit } from './collision';
 
 export { setJam, clearJam } from './gun';
+
+/** Fresh skyline from the balance layout: every tower at full height, undamaged. */
+export function createSkylineState(balance: CombatBalance): SkylineState {
+  return {
+    groundY: balance.skyline.groundY,
+    buildings: balance.skyline.buildings.map((b) => ({
+      id: b.id,
+      x: b.x,
+      width: b.width,
+      height: b.height,
+      stories: b.stories,
+      cut: 0,
+      damage: 0,
+    })),
+  };
+}
 
 /** Everything the combat tick needs from the rest of GameState, assembled by the engine each tick. */
 export interface CombatTickInput {
@@ -46,12 +63,52 @@ export function createCombatState(content: SystemContext['content']): CombatStat
     },
     aim: { desiredAngle: up, effectiveAngle: up },
     postIntegrity: B.postIntegrityMax,
-    director: { timer: effectiveSpawnInterval(0, B), override: null },
+    skyline: createSkylineState(B),
+    waves: { index: 0, phase: 'lull', timer: B.waves.firstLullSeconds, toSpawn: 0, spawnTimer: 0 },
+    director: { timer: 0, override: null },
     nextDroneId: 1,
     nextProjectileId: 1,
     dronesDowned: 0,
     gameOverEmitted: false,
   };
+}
+
+/** Apply a leaked drone's hit to a tower: cut slabs off the top, accrue render-only damage. */
+function cutBuilding(b: BuildingState, escapeDamage: number, balance: CombatBalance): void {
+  b.damage += escapeDamage;
+  b.cut = Math.min(b.stories, b.cut + escapeDamage * balance.repair.slabsPerDamage);
+}
+
+/** Between-wave passive repair: nudge the shared integrity back up and regrow sheared slabs (silent —
+ *  the Render layer animates from the changing `cut`). Only ticks during the lull. */
+function repairPassive(combat: CombatState, dt: number, balance: CombatBalance): void {
+  combat.postIntegrity = Math.min(balance.postIntegrityMax, combat.postIntegrity + balance.repair.passiveIntegrityPerSec * dt);
+  const slab = balance.repair.passiveSlabPerSec * dt;
+  for (const b of combat.skyline.buildings) {
+    if (b.cut > 0) b.cut = Math.max(0, b.cut - slab);
+    if (b.damage > 0) b.damage = Math.max(0, b.damage - slab / Math.max(balance.repair.slabsPerDamage, 1e-6));
+  }
+}
+
+/**
+ * Paid resident "patch-up" (the 'repair'-tagged service): immediately restore integrity and revert
+ * slabs, worst-damaged towers first. Emits `buildingRepaired` per tower touched (Render FX). Returns
+ * true if anything was repaired. Called by the engine when the player buys a repair service.
+ */
+export function repairSkyline(combat: CombatState, balance: CombatBalance, emit: (id: number, cut: number) => void): boolean {
+  const before = combat.postIntegrity;
+  combat.postIntegrity = Math.min(balance.postIntegrityMax, combat.postIntegrity + balance.repair.paidIntegrity);
+  let slabsLeft = balance.repair.paidSlabs;
+  const damaged = combat.skyline.buildings.filter((b) => b.cut > 0).sort((a, b) => b.cut - a.cut);
+  for (const b of damaged) {
+    if (slabsLeft <= 0) break;
+    const take = Math.min(b.cut, slabsLeft);
+    b.cut -= take;
+    b.damage = Math.max(0, b.damage - take / Math.max(balance.repair.slabsPerDamage, 1e-6));
+    slabsLeft -= take;
+    emit(b.id, b.cut);
+  }
+  return combat.postIntegrity > before || slabsLeft < balance.repair.paidSlabs;
 }
 
 /** Incident hook (major drone attack): set/clear the forced-wave override (docs §3.2/§4). */
@@ -71,11 +128,16 @@ export function updateCombat(combat: CombatState, dt: number, ctx: SystemContext
   // 1. Gun: aim, fire, heat/overheat/jam. Spawns projectiles + emits shotFired.
   updateGun(combat, dt, ctx, aimMod, flags, intent, tSeconds);
 
-  // 2. Spawn director → materialize new drones.
-  for (const cmd of stepSpawns(combat, dt, D, ctx.rng, ctx.content, flags)) {
+  // 2. Wave director → phase transitions (siren/start/clear) + materialize this wave's drones.
+  const wave = stepWaves(combat, dt, D, ctx.rng, ctx.content, flags);
+  if (wave.siren) ctx.events.emit('airRaidSiren', wave.siren);
+  if (wave.started) ctx.events.emit('waveStarted', {});
+  if (wave.cleared) ctx.events.emit('waveCleared', wave.cleared);
+  for (const cmd of wave.commands) {
     const def = ctx.content.drones.find((d) => d.kind === cmd.kind);
     if (!def) continue;
-    const drone = materialize(combat.nextDroneId++, def, cmd.origin, D, ctx.rng, B);
+    const drone = materialize(combat.nextDroneId++, def, cmd.origin, cmd.target, D, ctx.rng, B);
+    drone.targetBuildingId = cmd.targetBuildingId;
     if (cmd.colorTag !== undefined) drone.colorTag = cmd.colorTag;
     combat.drones.push(drone);
     ctx.events.emit('droneSpawned', { id: drone.id, kind: drone.kind });
@@ -119,12 +181,22 @@ export function updateCombat(combat: CombatState, dt: number, ctx: SystemContext
     (p) => !deadProjectiles.has(p.id) && p.ttl > 0 && !offArena(p.pos, B),
   );
 
-  // 6. Resolve survivors: destroyed → gone; escapes damage Post Integrity; wandered decoys cull.
+  // 6. Resolve survivors: destroyed → gone; escapes cut the target tower + drop shared integrity;
+  //    wandered decoys cull.
   const survivors: Drone[] = [];
   for (const d of combat.drones) {
     if (destroyed.has(d.id)) continue;
     if (reachedTarget(d, B)) {
-      ctx.events.emit('droneEscaped', { id: d.id, damage: d.escapeDamage });
+      const building = combat.skyline.buildings.find((b) => b.id === d.targetBuildingId);
+      if (building) {
+        cutBuilding(building, d.escapeDamage, B);
+        ctx.events.emit('buildingDamaged', { buildingId: building.id, cut: building.cut, damage: building.damage });
+      }
+      ctx.events.emit('droneEscaped', {
+        id: d.id,
+        damage: d.escapeDamage,
+        ...(d.targetBuildingId !== undefined ? { buildingId: d.targetBuildingId } : {}),
+      });
       combat.postIntegrity = Math.max(0, combat.postIntegrity - d.escapeDamage);
       continue;
     }
@@ -132,6 +204,9 @@ export function updateCombat(combat: CombatState, dt: number, ctx: SystemContext
     survivors.push(d);
   }
   combat.drones = survivors;
+
+  // 6b. Between-wave passive skyline repair (only during the quiet lull).
+  if (combat.waves.phase === 'lull') repairPassive(combat, dt, B);
 
   // 7. Gun-side loss condition: Post Integrity 0 ends the run exactly once.
   if (combat.postIntegrity <= 0 && !combat.gameOverEmitted) {
