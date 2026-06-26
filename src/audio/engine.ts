@@ -228,6 +228,9 @@ export function createAudioEngine(audio: AudioContent): AudioEngineImpl {
     on('droneEscaped', () => {
       playSfx('meterWarn');
     });
+    on('airRaidSiren', () => {
+      playSfx('airRaidSiren');
+    });
     on('rublesChanged', () => {
       if (kachingFrame === frameId) return; // the kill's ruble already played a kaching this frame
       playSfx('rubleTick');

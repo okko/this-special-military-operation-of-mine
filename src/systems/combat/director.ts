@@ -1,14 +1,15 @@
 /**
- * Spawn director (docs/areas/01-gameplay-engine.md §3.2). Deterministic and data-driven: an
- * interval/cap model driven by difficulty `D`, a `D`-weighted kind table, and skyline-edge spawn
- * points — all randomness via the injected seeded `rng`. `stepSpawns` is the pure step the tests use:
- * a given `(seed, D, dt sequence)` yields an identical `SpawnCommand[]` stream. Incident flags and the
- * forced-wave override scale the rate and queue the boss.
+ * Wave director (docs/areas/01-gameplay-engine.md §3.2, §request). Deterministic and data-driven:
+ * drones arrive in spaced WAVES — a long lull (≥2 min, for visiting residents), a 10s air-raid siren,
+ * then a burst whose size grows with the wave index. Difficulty `D` still scales each drone's stats and
+ * the eligible-kind table; all randomness via the injected seeded `rng`. `stepWaves` is the pure step
+ * the tests use: a given `(seed, D, dt sequence)` yields an identical result stream. Incident flags and
+ * the forced-wave override scale the wave size and queue the boss. Each drone targets a skyline tower.
  */
 import { lerp, clamp } from '../../core/math';
 import type { Vec2 } from '../../core/math';
 import type { Rng } from '../../core/rng';
-import type { CombatState, IncidentFlags } from '../../state/game-state';
+import type { BuildingState, CombatState, IncidentFlags } from '../../state/game-state';
 import type { DroneDef } from '../../content/drones';
 import type { CombatBalance } from '../../content/balance';
 import type { Content } from '../../content/loader';
@@ -64,46 +65,111 @@ export function pickSpawnOrigin(rng: Rng, balance: CombatBalance): Vec2 {
   return { x: w + 8, y: rng.range(0, h * 0.6) };
 }
 
+/** Drones launched by wave `index` (1-based): grows linearly, capped. */
+export function waveSize(index: number, balance: CombatBalance): number {
+  const w = balance.waves;
+  return Math.min(w.maxWaveSize, w.baseWaveSize + Math.max(0, index - 1) * w.waveSizePerWave);
+}
+
+/** A uniformly-chosen skyline tower (the drone's target). */
+function pickTargetBuilding(rng: Rng, buildings: readonly BuildingState[]): BuildingState {
+  const b = buildings[rng.int(0, buildings.length)] ?? buildings[0];
+  if (b === undefined) throw new Error('pickTargetBuilding: skyline has no buildings');
+  return b;
+}
+
+/** Phase transitions the wave director surfaces for combat.ts to turn into events. */
+export interface WaveStepResult {
+  commands: SpawnCommand[];
+  siren: { waveIndex: number; secondsUntil: number } | null;
+  started: { waveIndex: number } | null;
+  cleared: { waveIndex: number } | null;
+}
+
+function spawnCommand(rng: Rng, kind: string, combat: CombatState, balance: CombatBalance): SpawnCommand {
+  const b = pickTargetBuilding(rng, combat.skyline.buildings);
+  const inset = balance.skyline.targetInset;
+  return {
+    kind,
+    origin: pickSpawnOrigin(rng, balance),
+    target: { x: b.x, y: combat.skyline.groundY - b.height + inset },
+    targetBuildingId: b.id,
+  };
+}
+
 /**
- * One spawn step. Decrements the interval timer; on expiry it reschedules (rate scaled by the
- * incident `spawnRateMultiplier` and any forced-wave override) and emits one spawn when under the
- * concurrent cap. A queued/active boss is spawned once, ahead of the regular roll.
+ * One wave step. Runs the lull → siren → active state machine, emitting spawn commands during the
+ * active burst (under the concurrent cap) and surfacing the phase-transition signals (siren / wave
+ * started / wave cleared) for combat.ts to broadcast. A forced/incident boss is launched once during
+ * the siren or active phases (never during the quiet lull). Pure over the seeded `rng`.
  */
-export function stepSpawns(
+export function stepWaves(
   combat: CombatState,
   dt: number,
   D: number,
   rng: Rng,
   content: Content,
   flags: IncidentFlags,
-): SpawnCommand[] {
+): WaveStepResult {
   const balance = content.combat;
-  const dir = combat.director;
+  const w = combat.waves;
   const cap = concurrentCap(D, balance);
-  const cmds: SpawnCommand[] = [];
+  const result: WaveStepResult = { commands: [], siren: null, started: null, cleared: null };
 
-  // Boss: spawn once when an incident wants one and none is alive (slot permitting).
-  const bossWanted = (dir.override?.queuedBoss ?? false) || flags.bossActive;
+  // Incident/forced boss: launched once when wanted, none alive, slot free. A forced "major drone
+  // attack" interrupts the lull (a surprise raid), so it is NOT gated on the wave phase.
+  const bossWanted = (combat.director.override?.queuedBoss ?? false) || flags.bossActive;
   const bossAlive = combat.drones.some((d) => d.kind === BOSS_KIND);
   if (bossWanted && !bossAlive && combat.drones.length < cap) {
-    cmds.push({ kind: BOSS_KIND, origin: pickSpawnOrigin(rng, balance) });
-    if (dir.override) dir.override.queuedBoss = false;
+    result.commands.push(spawnCommand(rng, BOSS_KIND, combat, balance));
+    if (combat.director.override) combat.director.override.queuedBoss = false;
   }
 
-  dir.timer -= dt;
-  if (dir.timer <= 0) {
-    const spawnMul = flags.spawnRateMultiplier * (dir.override?.spawnMultiplier ?? 1);
-    const interval = effectiveSpawnInterval(D, balance) / Math.max(spawnMul, 0.0001);
-    const jitter = 1 + rng.range(-balance.spawn.jitter, balance.spawn.jitter);
-    dir.timer += Math.max(0.05, interval * jitter);
-
-    if (combat.drones.length + cmds.length < cap) {
-      const cands = candidateDefs(D, content.drones, flags);
-      if (cands.length > 0) {
-        const def = pickKind(rng, cands, D, flags);
-        cmds.push({ kind: def.kind, origin: pickSpawnOrigin(rng, balance) });
+  switch (w.phase) {
+    case 'lull': {
+      w.timer -= dt;
+      if (w.timer <= balance.waves.sirenLeadSeconds) {
+        w.phase = 'siren';
+        result.siren = { waveIndex: w.index + 1, secondsUntil: Math.max(0, w.timer) };
       }
+      break;
+    }
+    case 'siren': {
+      w.timer -= dt;
+      if (w.timer <= 0) {
+        w.index += 1;
+        w.phase = 'active';
+        const mul = (combat.director.override?.spawnMultiplier ?? 1) * Math.max(flags.spawnRateMultiplier, 0.0001);
+        w.toSpawn = Math.max(1, Math.round(waveSize(w.index, balance) * mul));
+        w.spawnTimer = 0;
+        result.started = { waveIndex: w.index };
+      }
+      break;
+    }
+    case 'active': {
+      if (w.toSpawn > 0) {
+        w.spawnTimer -= dt;
+        while (w.spawnTimer <= 0 && w.toSpawn > 0 && combat.drones.length + result.commands.length < cap) {
+          const cands = candidateDefs(D, content.drones, flags);
+          if (cands.length === 0) {
+            w.toSpawn = 0; // nothing eligible (shouldn't happen — scout is always unlocked); don't stall
+            break;
+          }
+          const def = pickKind(rng, cands, D, flags);
+          result.commands.push(spawnCommand(rng, def.kind, combat, balance));
+          w.toSpawn -= 1;
+          const jitter = 1 + rng.range(-balance.waves.spawnJitter, balance.waves.spawnJitter);
+          w.spawnTimer += Math.max(0.05, balance.waves.spawnInterval * jitter);
+        }
+      }
+      // Wave done once everything is launched and the sky is clear → the lull (repairs) begins.
+      if (w.toSpawn <= 0 && combat.drones.length === 0 && result.commands.length === 0) {
+        w.phase = 'lull';
+        w.timer = balance.waves.lullSeconds;
+        result.cleared = { waveIndex: w.index };
+      }
+      break;
     }
   }
-  return cmds;
+  return result;
 }

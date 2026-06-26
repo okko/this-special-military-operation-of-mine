@@ -7,10 +7,12 @@
 import type { Vec2 } from '../../core/math';
 import type { SpawnDirectorState } from '../../state/game-state';
 
-/** What `stepSpawns` emits each roll; combat.ts materializes it into a Drone. Deterministic per seed. */
+/** What the wave director emits each roll; combat.ts materializes it into a Drone. Deterministic per seed. */
 export interface SpawnCommand {
   kind: string;
   origin: Vec2; // offscreen point on a skyline edge
+  target: Vec2; // the skyline tower roof this drone dives at
+  targetBuildingId: number; // which skyline building `target` belongs to
   colorTag?: string; // jackpot letter, if tagged (unused this pass; plumbed for later)
 }
 

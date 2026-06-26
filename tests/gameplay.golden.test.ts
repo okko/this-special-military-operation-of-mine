@@ -46,7 +46,7 @@ function run(seed: number): Summary {
   return {
     shiftSeconds: Math.round(gs.time.shiftSeconds * 1000) / 1000,
     difficulty: Math.round(gs.time.difficulty * 1000) / 1000,
-    postIntegrity: gs.combat.postIntegrity,
+    postIntegrity: Math.round(gs.combat.postIntegrity * 1000) / 1000,
     dronesDowned: gs.combat.dronesDowned,
     score: gs.scoring.score,
     rubles: gs.economy.rubles,
@@ -56,16 +56,21 @@ function run(seed: number): Summary {
   };
 }
 
+// Regenerated for the wave-director rework + hittability balance pass (§request): drones now arrive in
+// waves and dive at skyline towers; projectiles are larger/faster and early drones slower so the gun
+// can actually defend. With the generic sweep-and-fire script the first wave now yields one kill before
+// the rest leak, and the lull's passive repair leaves the shared integrity fractional. The rng seed is
+// unchanged (the wave roll consumes the same rng) — only the sim outcome moved. Updated deliberately.
 const GOLDEN: Summary = {
   shiftSeconds: 10,
   difficulty: 1,
-  postIntegrity: 84,
-  dronesDowned: 0,
-  score: 49,
-  rubles: 0,
-  drones: 3,
-  projectiles: 6,
-  rngSeed: 2220285125,
+  postIntegrity: 60.493,
+  dronesDowned: 1,
+  score: 149,
+  rubles: 1,
+  drones: 0,
+  projectiles: 5,
+  rngSeed: 3356074071,
 };
 
 describe('gameplay determinism golden', () => {

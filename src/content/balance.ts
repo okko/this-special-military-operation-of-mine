@@ -53,6 +53,40 @@ export interface CombatBalance {
   scaling: { speedPerD: number; hpPerD: number };
 
   difficulty: { rampSeconds: number; maxD: number; dayLengthSeconds: number };
+
+  /** The damageable Moscow skyline the drones dive at (arena-space). The soldier's foreground tower
+   *  is a view-only cut-away and is NOT listed here (never a drone target). `targetInset` lifts the
+   *  drones' aim point just below each roof so a leaked drone reads as crashing into the upper floors. */
+  skyline: {
+    groundY: number;
+    targetInset: number;
+    buildings: { id: number; x: number; width: number; height: number; stories: number }[];
+  };
+
+  /** Wave cadence (drones arrive in spaced waves; ≥`lullSeconds` between them, siren `sirenLeadSeconds`
+   *  before each). `firstLullSeconds` is the short pre-first-wave breather. Wave N launches
+   *  `min(maxWaveSize, baseWaveSize + (N-1)*waveSizePerWave)` drones at `spawnInterval` (±`spawnJitter`). */
+  waves: {
+    firstLullSeconds: number;
+    lullSeconds: number;
+    sirenLeadSeconds: number;
+    baseWaveSize: number;
+    waveSizePerWave: number;
+    maxWaveSize: number;
+    spawnInterval: number;
+    spawnJitter: number;
+  };
+
+  /** Skyline reparations (§request). Passive regrow only ticks during the lull; a paid resident
+   *  "patch-up" service applies the paid amounts immediately. `slabsPerDamage` maps a leaked drone's
+   *  escapeDamage to sheared slabs. */
+  repair: {
+    passiveIntegrityPerSec: number;
+    passiveSlabPerSec: number;
+    paidIntegrity: number;
+    paidSlabs: number;
+    slabsPerDamage: number;
+  };
 }
 
 export const combatBalance: CombatBalance = {
@@ -74,7 +108,7 @@ export const combatBalance: CombatBalance = {
 
   aim: { swayFrequencyHz: 0.7, drunkFrequencyHz: 0.4, swayRadPerUnit: 0.12, drunkWobbleRad: 0.18 },
 
-  projectile: { speed: 320, ttl: 1.5, radius: 1.5, cap: 64, hitscan: false },
+  projectile: { speed: 420, ttl: 1.5, radius: 3.5, cap: 64, hitscan: false },
 
   spawn: {
     baseInterval: 1.6,
@@ -89,4 +123,41 @@ export const combatBalance: CombatBalance = {
   scaling: { speedPerD: 0.08, hpPerD: 0.12 },
 
   difficulty: { rampSeconds: 120, maxD: 12, dayLengthSeconds: 90 },
+
+  // Background Moscow skyline (drones' targets), flanking and set behind the soldier's central tower
+  // (x≈192). Heights/stories vary so the cut-away damage reads at a glance.
+  skyline: {
+    groundY: 210,
+    targetInset: 6,
+    buildings: [
+      { id: 1, x: 30, width: 36, height: 110, stories: 18 },
+      { id: 2, x: 76, width: 30, height: 134, stories: 22 },
+      { id: 3, x: 118, width: 34, height: 96, stories: 16 },
+      { id: 4, x: 158, width: 26, height: 152, stories: 25 },
+      { id: 5, x: 226, width: 26, height: 146, stories: 24 },
+      { id: 6, x: 266, width: 34, height: 104, stories: 17 },
+      { id: 7, x: 308, width: 30, height: 130, stories: 21 },
+      { id: 8, x: 352, width: 36, height: 114, stories: 19 },
+    ],
+  },
+
+  // Drones come in waves with ≥2 min between them (time to visit residents); a siren wails 10s ahead.
+  waves: {
+    firstLullSeconds: 3,
+    lullSeconds: 120,
+    sirenLeadSeconds: 10,
+    baseWaveSize: 6,
+    waveSizePerWave: 2,
+    maxWaveSize: 28,
+    spawnInterval: 0.7,
+    spawnJitter: 0.3,
+  },
+
+  repair: {
+    passiveIntegrityPerSec: 0.4, // ~48 restored over a 120s lull — recovers most, never fully
+    passiveSlabPerSec: 0.05,
+    paidIntegrity: 25,
+    paidSlabs: 5,
+    slabsPerDamage: 1 / 8,
+  },
 };

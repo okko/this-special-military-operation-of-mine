@@ -22,11 +22,13 @@ export function speedScale(baseSpeed: number, D: number, balance: CombatBalance)
   return baseSpeed * (1 + D * balance.scaling.speedPerD);
 }
 
-/** Build a live drone from a catalog def + spawn origin, scaling stats and seeding movement params. */
+/** Build a live drone from a catalog def + spawn origin, scaling stats and seeding movement params.
+ *  `target` is the point the drone homes to — a skyline tower's roof (wander decoys ignore it). */
 export function materialize(
   id: number,
   def: DroneDef,
   origin: { x: number; y: number },
+  target: { x: number; y: number },
   D: number,
   rng: Rng,
   balance: CombatBalance,
@@ -37,7 +39,7 @@ export function materialize(
     kind: def.movement,
     speed,
     origin: { ...origin },
-    target: { ...balance.postTarget },
+    target: { ...target },
     amplitude: def.movement === 'zigzag' ? rng.range(10, 24) : def.movement === 'wander' ? rng.range(8, 16) : 0,
     frequency: def.movement === 'zigzag' || def.movement === 'wander' ? rng.range(0.3, 0.8) : 0,
     phase: rng.range(0, TWO_PI),
@@ -101,10 +103,10 @@ export function advanceDrone(drone: Drone, dt: number, balance: CombatBalance): 
   drone.pos = pos;
 }
 
-/** True when a drone has reached the post (an escape). `wander` decoys never target the post. */
+/** True when a drone has reached its target tower (an escape). `wander` decoys never target a tower. */
 export function reachedTarget(drone: Drone, balance: CombatBalance): boolean {
   if (drone.movement.kind === 'wander') return false;
-  return v2.dist(drone.pos, balance.postTarget) <= balance.escapeRadius;
+  return v2.dist(drone.pos, drone.movement.target) <= balance.escapeRadius;
 }
 
 /** True when a position has drifted off the arena (used to cull wandering decoys harmlessly). */

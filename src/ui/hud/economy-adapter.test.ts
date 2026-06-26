@@ -20,7 +20,7 @@ describe('createHudEconomy adapter (§8.11 model derivation)', () => {
     gs.economy.relationships['babushka'] = 42;
     const e = entry(gs, 'babushka');
     expect(e.name).toBe('Galina Petrovna');
-    expect(e.floor).toBe(3);
+    expect(e.floor).toBe(25); // residents now live on the soldier tower's top floors (21–32)
     expect(e.reputation).toBe(42);
     expect(e.services.map((s) => s.id)).toEqual(['stew', 'tea']);
   });

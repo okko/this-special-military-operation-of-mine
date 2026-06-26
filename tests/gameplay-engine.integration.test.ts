@@ -26,7 +26,12 @@ function capture<T>(ctx: SystemContext, key: Parameters<SystemContext['events'][
 }
 
 /** Inject a stationary drone (speed 0) at a fixed point so a controlled run can resolve it. */
-function injectDrone(combat: CombatState, pos: { x: number; y: number }, opts: { kind?: string; hp?: number; awardsRuble?: boolean; escapeDamage?: number } = {}): Drone {
+function injectDrone(
+  combat: CombatState,
+  pos: { x: number; y: number },
+  opts: { kind?: string; hp?: number; awardsRuble?: boolean; escapeDamage?: number; target?: { x: number; y: number }; buildingId?: number } = {},
+): Drone {
+  const target = opts.target ?? { x: pos.x, y: pos.y + 400 }; // far below ⇒ no escape unless overridden
   const d: Drone = {
     id: combat.nextDroneId++,
     kind: opts.kind ?? 'scout',
@@ -35,9 +40,10 @@ function injectDrone(combat: CombatState, pos: { x: number; y: number }, opts: {
     hp: opts.hp ?? 1,
     maxHp: opts.hp ?? 1,
     radius: 6,
-    movement: { kind: 'straight', speed: 0, origin: { ...pos }, target: { x: pos.x, y: pos.y + 400 }, amplitude: 0, frequency: 0, phase: 0, accel: 0, elapsed: 0 },
+    movement: { kind: 'straight', speed: 0, origin: { ...pos }, target: { ...target }, amplitude: 0, frequency: 0, phase: 0, accel: 0, elapsed: 0 },
     escapeDamage: opts.escapeDamage ?? 10,
     awardsRuble: opts.awardsRuble ?? true,
+    ...(opts.buildingId !== undefined ? { targetBuildingId: opts.buildingId } : {}),
   };
   combat.drones.push(d);
   return d;
@@ -77,7 +83,8 @@ describe('gameplay engine integration', () => {
     const gs = createGameState(ctx.content, 3);
     const engine = createEngine(gs, ctx);
     gs.combat.director.timer = 9999;
-    injectDrone(gs.combat, { ...ctx.content.combat.postTarget }, { escapeDamage: 18 });
+    const target = { ...ctx.content.combat.postTarget };
+    injectDrone(gs.combat, target, { escapeDamage: 18, target, buildingId: 4 });
 
     engine.step(1 / 60, NO_FIRE);
 
@@ -91,7 +98,8 @@ describe('gameplay engine integration', () => {
     const go = capture<{ cause: string }>(ctx, 'gameOver');
     gs.combat.director.timer = 9999;
     gs.combat.postIntegrity = 10;
-    injectDrone(gs.combat, { ...ctx.content.combat.postTarget }, { escapeDamage: 50 });
+    const target = { ...ctx.content.combat.postTarget };
+    injectDrone(gs.combat, target, { escapeDamage: 50, target, buildingId: 4 });
 
     engine.step(1 / 60, NO_FIRE);
     expect(go).toHaveLength(1);

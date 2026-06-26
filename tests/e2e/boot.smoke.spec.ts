@@ -59,11 +59,17 @@ test('tap starts a run; held fire sweeping the sky destroys a drone; release cea
       return { downed: c?.dronesDowned ?? 0, aim: c?.aimAngle ?? 0, drones: c?.drones ?? [] };
     });
 
-  // Drones home to the post — which is the gun pivot — so each approaches on a CONSTANT bearing.
-  // Hold fire (Space) and use the keyboard to steer the barrel onto the farthest drone's bearing and
-  // hold it there: the tracer stream sits on that ray and the incoming drone walks into it. A simple
-  // closed loop on the observable aim angle (no pointer→world mapping, valid touch-only too).
+  // Drones now arrive in waves and dive at skyline towers spread across the sky, so they no longer share
+  // one bearing. Competent keyboard play: LOCK onto one drone (focus fire) — follow it between reads and
+  // steer the barrel onto its bearing with fire held; the tracer sits on that ray and the drone walks
+  // into it. A closed loop on the observable aim angle (no pointer→world mapping; valid touch-only too).
   const PIVOT = { x: 192, y: 196 };
+  const norm = (a: number): number => {
+    let d = a;
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    return d;
+  };
   let kd = false;
   let ka = false;
   const setKeys = async (wantD: boolean, wantA: boolean): Promise<void> => {
@@ -75,23 +81,34 @@ test('tap starts a run; held fire sweeping the sky destroys a drone; release cea
 
   await page.keyboard.down('Space');
   let downed = 0;
-  for (let i = 0; i < 220 && downed === 0; i++) {
+  let lock: { x: number; y: number } | null = null; // commit to one drone (focus fire) until it's gone
+  for (let i = 0; i < 320 && downed === 0; i++) {
     const s = await readState();
     downed = s.downed;
     if (downed > 0) break;
-    const target = s.drones.reduce<{ x: number; y: number } | null>((far, d) => {
-      const r = Math.hypot(d.x - PIVOT.x, d.y - PIVOT.y);
-      return !far || r > Math.hypot(far.x - PIVOT.x, far.y - PIVOT.y) ? d : far;
-    }, null);
-    if (target) {
-      const bearing = Math.atan2(target.y - PIVOT.y, target.x - PIVOT.x);
-      let diff = bearing - s.aim;
-      while (diff > Math.PI) diff -= 2 * Math.PI;
-      while (diff < -Math.PI) diff += 2 * Math.PI;
-      if (Math.abs(diff) < 0.05) await setKeys(false, false);
+    // Follow the locked drone (nearest to its last position); otherwise acquire the closest-bearing one.
+    if (lock) {
+      let near: { x: number; y: number; d: number } | null = null;
+      for (const d of s.drones) {
+        const dist = Math.hypot(d.x - lock.x, d.y - lock.y);
+        if (!near || dist < near.d) near = { x: d.x, y: d.y, d: dist };
+      }
+      lock = near && near.d < 60 ? { x: near.x, y: near.y } : null;
+    }
+    if (!lock && s.drones.length > 0) {
+      let best: { x: number; y: number; ad: number } | null = null;
+      for (const d of s.drones) {
+        const ad = Math.abs(norm(Math.atan2(d.y - PIVOT.y, d.x - PIVOT.x) - s.aim));
+        if (!best || ad < best.ad) best = { x: d.x, y: d.y, ad };
+      }
+      lock = best ? { x: best.x, y: best.y } : null;
+    }
+    if (lock) {
+      const diff = norm(Math.atan2(lock.y - PIVOT.y, lock.x - PIVOT.x) - s.aim);
+      if (Math.abs(diff) < 0.03) await setKeys(false, false);
       else await setKeys(diff > 0, diff < 0);
     }
-    await page.waitForTimeout(40);
+    await page.waitForTimeout(30);
   }
   await setKeys(false, false);
   await page.keyboard.up('Space'); // release ceases fire — the gun never sticks
@@ -119,24 +136,29 @@ test('audio context reaches "running" after the first gesture (area 06, §8.13)'
     .toBe('running');
 });
 
-test('HUD meter-icon row matches the committed snapshot per engine (area 10, §8.16)', async ({ page }) => {
+test('the DOM HUD overlay shows during a run (area 10, §8.16 — in-game UI is now Three.js + DOM)', async ({ page }) => {
+  // The in-game UI was fully replaced (§request): the world renders in Three.js on #game3d and the HUD
+  // is a DOM overlay on #hud, so the old pixel-art meter-icon snapshot no longer applies. This smoke
+  // proves the new HUD mounts + shows the live readouts once a run starts (engine-agnostic, no WebGL).
+  const errors: string[] = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text());
+  });
+  page.on('pageerror', (e) => errors.push(e.message));
+
   await page.goto('/');
   const canvas = page.locator('#game');
   await expect(canvas).toBeVisible();
 
-  // Start a run so the HUD overlay renders, then snapshot IMMEDIATELY — before the first drone spawns —
-  // so only the static, procedural meter icons (😴🍞💧🚬💩) sit in the clipped column (no live bars/drones).
-  // "Start New Shift" is pre-selected on the Main Menu; Enter begins the run (the tap just unlocks audio).
+  // "Start New Shift" is pre-selected on the Main Menu; the tap unlocks audio, Enter begins the run.
   await canvas.click({ position: { x: 40, y: 40 } });
   await page.keyboard.press('Enter');
-  await page.waitForTimeout(120);
 
-  const box = await canvas.boundingBox();
-  if (!box) throw new Error('canvas has no bounding box');
-  const scale = Math.round(box.width / 384); // integer-scaled (compatibility.md §2)
-  // Internal x:[0,13) is the icon column (bars start at x=14); y:[0,46) covers the five stacked icons.
-  const clip = { x: box.x, y: box.y, width: 13 * scale, height: 46 * scale };
-  await expect(page).toHaveScreenshot('hud-icon-row.png', { clip, maxDiffPixelRatio: 0.02 });
+  const hud = page.locator('#hud');
+  await expect(hud).toBeVisible({ timeout: 5000 });
+  await expect(hud).toContainText('CITY INTEGRITY');
+  await expect(page.locator('#game3d')).toBeVisible(); // the Three.js world canvas is shown while Playing
+  expect(errors).toEqual([]);
 });
 
 test.fixme('localStorage round-trips; in-memory fallback engages when storage throws', () => {

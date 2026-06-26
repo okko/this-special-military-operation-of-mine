@@ -5,7 +5,7 @@
  * than producing a broken run. Throws `ContentValidationError` with a locating path.
  */
 import { ContentValidationError } from './content-error';
-import { asObject, num } from './validate-helpers';
+import { asObject, asArray, num } from './validate-helpers';
 import type { CombatBalance } from './balance';
 
 function vec2(obj: Record<string, unknown>, key: string, path: string): void {
@@ -76,6 +76,46 @@ export function validateCombatBalance(raw: unknown): CombatBalance {
   num(diff, 'rampSeconds', `${path}.difficulty`, { min: 0.001 });
   num(diff, 'maxD', `${path}.difficulty`, { min: 0 });
   num(diff, 'dayLengthSeconds', `${path}.difficulty`, { min: 0.001 });
+
+  const skyline = asObject(root.skyline, `${path}.skyline`);
+  num(skyline, 'groundY', `${path}.skyline`);
+  num(skyline, 'targetInset', `${path}.skyline`, { min: 0 });
+  const buildings = asArray(skyline.buildings, `${path}.skyline.buildings`);
+  if (buildings.length === 0) {
+    throw new ContentValidationError('skyline.buildings must be non-empty', `${path}.skyline.buildings`);
+  }
+  const seenIds = new Set<number>();
+  buildings.forEach((b, i) => {
+    const bp = `${path}.skyline.buildings[${i}]`;
+    const bo = asObject(b, bp);
+    const id = num(bo, 'id', bp, { int: true, min: 1 });
+    if (seenIds.has(id)) throw new ContentValidationError(`duplicate building id ${id}`, bp);
+    seenIds.add(id);
+    num(bo, 'x', bp);
+    num(bo, 'width', bp, { min: 1 });
+    num(bo, 'height', bp, { min: 1 });
+    num(bo, 'stories', bp, { int: true, min: 1 });
+  });
+
+  const waves = asObject(root.waves, `${path}.waves`);
+  num(waves, 'firstLullSeconds', `${path}.waves`, { min: 0 });
+  num(waves, 'lullSeconds', `${path}.waves`, { min: 0.001 });
+  num(waves, 'sirenLeadSeconds', `${path}.waves`, { min: 0 });
+  const baseWaveSize = num(waves, 'baseWaveSize', `${path}.waves`, { int: true, min: 1 });
+  num(waves, 'waveSizePerWave', `${path}.waves`, { min: 0 });
+  const maxWaveSize = num(waves, 'maxWaveSize', `${path}.waves`, { int: true, min: 1 });
+  if (maxWaveSize < baseWaveSize) {
+    throw new ContentValidationError('waves.maxWaveSize must be ≥ baseWaveSize', `${path}.waves`);
+  }
+  num(waves, 'spawnInterval', `${path}.waves`, { min: 0.001 });
+  num(waves, 'spawnJitter', `${path}.waves`, { min: 0, max: 1 });
+
+  const repair = asObject(root.repair, `${path}.repair`);
+  num(repair, 'passiveIntegrityPerSec', `${path}.repair`, { min: 0 });
+  num(repair, 'passiveSlabPerSec', `${path}.repair`, { min: 0 });
+  num(repair, 'paidIntegrity', `${path}.repair`, { min: 0 });
+  num(repair, 'paidSlabs', `${path}.repair`, { min: 0 });
+  num(repair, 'slabsPerDamage', `${path}.repair`, { min: 0 });
 
   return raw as CombatBalance;
 }
