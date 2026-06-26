@@ -63,14 +63,22 @@ function col(key: PaletteKey): THREE.Color {
   return new THREE.Color(PALETTE[key]);
 }
 
-const NOOP_VIEW: ThreeView = {
-  resize() {},
-  screenToWorld: () => ({ x: ARENA_CX, y: POST_Y }),
-  render() {},
-  startIntro() {},
-  setVisible() {},
-  dispose() {},
-};
+// A renderer-less stand-in used when WebGL is unavailable (headless/unsupported engines, e.g. CI
+// Firefox without a GL context). The sim keeps running; the world just isn't drawn. setVisible still
+// toggles the canvas so the in-game surface shows while Playing (the HUD overlays it as usual) — the
+// §8.16 smoke expects #game3d shown during a run regardless of whether GL actually drew into it.
+function noopView(canvas: HTMLCanvasElement): ThreeView {
+  return {
+    resize() {},
+    screenToWorld: () => ({ x: ARENA_CX, y: POST_Y }),
+    render() {},
+    startIntro() {},
+    setVisible(visible: boolean): void {
+      canvas.style.display = visible ? 'block' : 'none';
+    },
+    dispose() {},
+  };
+}
 
 interface SkylineTower {
   buildingId: number;
@@ -78,11 +86,25 @@ interface SkylineTower {
 }
 
 export function createThreeView(canvas: HTMLCanvasElement, content: Content): ThreeView {
+  // Acquire the WebGL2 context ourselves so we can bail out SILENTLY when it's unavailable. Letting
+  // THREE.WebGLRenderer create it would log console.error (and fire webglcontextcreationerror) BEFORE
+  // it throws — which trips the strict no-console-error cross-browser smokes on headless engines that
+  // disable WebGL (e.g. CI Firefox: "AllowWebgl2:false"). A bare getContext probe is quiet (no Three
+  // listener attached yet), and passing the ready context in skips Three's own getContext+throw path,
+  // so a missing GL stays silent and the sim runs renderer-less via the no-op view.
+  let gl: WebGL2RenderingContext | null = null;
+  try {
+    gl = canvas.getContext('webgl2', { alpha: true, antialias: true, powerPreference: 'high-performance' });
+  } catch {
+    gl = null;
+  }
+  if (!gl) return noopView(canvas); // no WebGL (headless/unsupported) — keep the sim running renderer-less
+
   let renderer: THREE.WebGLRenderer;
   try {
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    renderer = new THREE.WebGLRenderer({ canvas, context: gl, antialias: true, powerPreference: 'high-performance' });
   } catch {
-    return NOOP_VIEW; // no WebGL (headless/unsupported) — keep the sim running renderer-less
+    return noopView(canvas); // GL present but renderer init failed — keep the sim running renderer-less
   }
   renderer.setPixelRatio(Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 3));
 
