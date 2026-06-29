@@ -21,13 +21,14 @@ import type { Scene } from './scene';
 import type { SystemContext } from '../core/system-context';
 import type { InputEvent } from '../input/input';
 import type { Renderer } from '../render/renderer';
-import type { ResidentDef } from '../content/residents';
+import type { ResidentDef, ServiceDef, FavorDef, ReliefRequest, Consequence } from '../content/residents';
+import type { MeterKey } from '../types/meter-key';
 import type { GameState } from './game-state';
 import type { Vec2 } from '../core/math';
 import type { ThreeView } from '../render/three/view';
 import type { GameOverlay } from '../ui/game-overlay';
 import type { HudEconomy, SettingsView, ResidentMenuEntry } from '../ui/hud/types';
-import type { InteriorOption, PlayingViewState, PlayMode } from './playing-view';
+import type { InteriorOption, PlayingViewState, PlayMode, TransactionFeedback, FeedbackLine } from './playing-view';
 
 const TOP_FLOOR = 32; // the firing-post roof sits atop floor 32
 const BOTTOM_FLOOR = 21; // residents occupy the top 12 floors (21–32)
@@ -37,6 +38,66 @@ const NAV_DOWN = new Set(['ArrowDown', 'KeyS']);
 const NAV_LEFT = new Set(['ArrowLeft', 'KeyA']);
 const NAV_RIGHT = new Set(['ArrowRight', 'KeyD']);
 const CONFIRM = new Set(['Enter', 'NumpadEnter', 'Space']);
+
+/** What the buy/beg listeners record when the engine applies a transaction (null until it does). */
+type PendingTxn = { kind: 'service'; cost: number } | { kind: 'favor' } | null;
+
+// ---- Transaction-result copy --------------------------------------------------------------------
+// Turns a chosen option's content (relief / side effects / consequence) into the short, human lines the
+// result dialog pops. Pure formatting — no gameplay numbers are recomputed here (the engine already
+// applied the real transaction); these describe WHAT it did so "buy" stops feeling like a no-op.
+const METER_FB: Record<MeterKey, { icon: string; name: string }> = {
+  sleep: { icon: '😴', name: 'Fatigue' },
+  hunger: { icon: '🍞', name: 'Hunger' },
+  thirst: { icon: '💧', name: 'Thirst' },
+  vice: { icon: '🚬', name: 'Craving' },
+  poo: { icon: '💩', name: 'Bladder' },
+};
+
+// `delta` is the signed change to the meter VALUE (meters rise toward crisis), so a drop reads as relief
+// (green ↓) and a rise as a downside (red ↑) — matching how the HUD bars fill.
+function meterLine(meter: MeterKey, delta: number): FeedbackLine {
+  const m = METER_FB[meter];
+  const worse = delta > 0;
+  return { icon: m.icon, text: `${m.name} ${worse ? '+' : '−'}${Math.abs(Math.round(delta))}`, tone: worse ? 'bad' : 'good' };
+}
+
+function reliefLines(r: ReliefRequest): FeedbackLine[] {
+  const out: FeedbackLine[] = [meterLine(r.meter, -r.amount)]; // amount>0 ⇒ the meter drops (relief)
+  if (r.secondary) out.push(meterLine(r.secondary.meter, r.secondary.amount)); // signed: + worsens, − relieves
+  if (r.effect === 'drunk') out.push({ icon: '🥴', text: 'A pleasant haze', tone: 'neutral' });
+  else if (r.effect === 'coffee') out.push({ icon: '⚡', text: 'Wired and jittery', tone: 'neutral' });
+  return out;
+}
+
+function consequenceLine(c: Consequence): FeedbackLine {
+  switch (c.kind) {
+    case 'debt':
+      return { icon: '📉', text: `Owe ₽${c.amount} later`, tone: 'bad' };
+    case 'chore':
+      return { icon: '🧹', text: `A ${c.durationSeconds}s chore owed`, tone: 'bad' };
+    case 'reputation':
+      return { icon: '📉', text: `−${c.amount} reputation`, tone: 'bad' };
+    case 'degraded':
+      return { icon: '💢', text: 'Weaker than paying for it', tone: 'bad' };
+  }
+}
+
+/** What a paid service produces: meter relief + side effects, or a special non-meter outcome by tag. */
+function serviceOutcome(svc: ServiceDef): FeedbackLine[] {
+  const out: FeedbackLine[] = svc.relief ? reliefLines(svc.relief) : [];
+  if (svc.tags.includes('gun')) out.push({ icon: '🔧', text: 'Gun jam cleared', tone: 'good' });
+  if (svc.tags.includes('repair')) out.push({ icon: '🏗️', text: 'City block patched up', tone: 'good' });
+  return out;
+}
+
+/** What a begged favor produces: the (free but) degraded relief or jam-clear, then its one downside. */
+function favorOutcome(fav: FavorDef): FeedbackLine[] {
+  // A relief-less favor is the on-credit jam clear (engine enacts it); otherwise it grants meter relief.
+  const out: FeedbackLine[] = fav.relief ? reliefLines(fav.relief) : [{ icon: '🔧', text: 'Gun jam cleared', tone: 'good' }];
+  out.push(consequenceLine(fav.consequence));
+  return out;
+}
 
 export interface PlayingSceneOptions {
   /** Per-tick diagnostic sink used by the cross-browser e2e (`__combat`). */
@@ -70,6 +131,24 @@ export function createPlayingScene(opts: PlayingSceneOptions = {}): Scene {
   let selected = 0;
   let cachedOptions: InteriorOption[] = [];
 
+  // Last-confirm feedback for the result dialog. `nonce` bumps per confirm so the overlay re-pops even
+  // on a repeat. `pendingTxn` is set synchronously by the buy/beg event listeners during a confirm's
+  // emit and read straight after — it's how we tell an applied transaction from one the engine rejected.
+  let feedback: TransactionFeedback | null = null;
+  let feedbackNonce = 0;
+  let pendingTxn: PendingTxn = null;
+  const txnOffs: Array<() => void> = [];
+
+  function setFeedback(f: Omit<TransactionFeedback, 'nonce'>): void {
+    feedbackNonce += 1;
+    feedback = { ...f, nonce: feedbackNonce };
+  }
+  // Reset via a helper (not an inline `pendingTxn = null`) so control-flow analysis keeps the full
+  // `PendingTxn` type at the read below — the listeners that flip it run during the synchronous emit.
+  function armTxn(): void {
+    pendingTxn = null;
+  }
+
   const panelKey = (): string => opts.settings?.residentPanelKey ?? 'KeyE';
 
   function currentResidentEntry(): ResidentMenuEntry | null {
@@ -91,6 +170,7 @@ export function createPlayingScene(opts: PlayingSceneOptions = {}): Scene {
     mode = 'interior';
     floor = TOP_FLOOR;
     selected = 0;
+    feedback = null; // each visit starts with a clean counter
     // Stepping inside drops the trigger so the gun never sticks on while we walk down.
     fireHeld = false;
     left = false;
@@ -99,6 +179,7 @@ export function createPlayingScene(opts: PlayingSceneOptions = {}): Scene {
   function backToShooting(): void {
     mode = 'shooting';
     floor = TOP_FLOOR;
+    feedback = null;
   }
 
   // Routed through the event bus exactly like the old intercom panel; the engine consumes the intent.
@@ -106,24 +187,61 @@ export function createPlayingScene(opts: PlayingSceneOptions = {}): Scene {
 
   function confirmSelection(): void {
     const choice = cachedOptions[selected];
-    if (!choice || choice.option.disabledReason !== undefined) return; // greyed entries are non-selectable
+    if (!choice || !gs) return;
+    const resident = occupantByFloor.get(floor);
+    const who = resident?.name ?? '';
+    const title = choice.option.label;
+
+    // Greyed entries can't be bought — pop the reason rather than silently doing nothing.
+    if (choice.option.disabledReason !== undefined) {
+      setFeedback({ ok: false, kind: choice.kind, who, title, lines: [{ icon: '🚫', text: choice.option.disabledReason, tone: 'bad' }] });
+      return;
+    }
+
+    armTxn(); // a buy/beg listener flips pendingTxn on success while the (synchronous) intent dispatches
     if (choice.kind === 'service') {
       emitIntent({ kind: 'buyService', residentId: choice.residentId, serviceId: choice.option.id });
     } else {
       emitIntent({ kind: 'begFavor', residentId: choice.residentId, favorId: choice.option.id });
     }
+
+    // The bus is synchronous, so the engine has now applied (and announced) — or rejected — the intent.
+    const txn = pendingTxn;
+    if (txn === null) {
+      // Rejected. The only ungated path here is an unaffordable service (favors/disabled rows are caught above).
+      const reason =
+        choice.kind === 'service' && choice.option.affordable === false
+          ? `Need ₽${choice.option.costRubles ?? '?'} — can't afford it`
+          : 'No deal right now';
+      setFeedback({ ok: false, kind: choice.kind, who, title, lines: [{ icon: '🚫', text: reason, tone: 'bad' }] });
+      return;
+    }
+
+    const lines: FeedbackLine[] = [];
+    if (choice.kind === 'service') {
+      const svc = resident?.services.find((s) => s.id === choice.option.id);
+      lines.push({ icon: '💸', text: `−₽${txn.kind === 'service' ? txn.cost : 0}`, tone: 'cost' });
+      if (svc) lines.push(...serviceOutcome(svc));
+    } else {
+      const fav = resident?.favors.find((f) => f.id === choice.option.id);
+      lines.push({ icon: '🤝', text: 'Begged a favor — no rubles', tone: 'neutral' });
+      if (fav) lines.push(...favorOutcome(fav));
+    }
+    setFeedback({ ok: true, kind: choice.kind, who, title, lines });
   }
 
   function handleInteriorKey(code: string): void {
     if (NAV_DOWN.has(code)) {
       floor = Math.max(BOTTOM_FLOOR, floor - 1);
       selected = 0;
+      feedback = null; // walked to another door — clear the last receipt
     } else if (NAV_UP.has(code)) {
       const next = floor + 1;
       if (next > TOP_FLOOR) backToShooting();
       else {
         floor = next;
         selected = 0;
+        feedback = null;
       }
     } else if (NAV_LEFT.has(code)) {
       selected = Math.max(0, selected - 1);
@@ -152,6 +270,7 @@ export function createPlayingScene(opts: PlayingSceneOptions = {}): Scene {
       currentResidentName: occ?.name ?? null,
       options: cachedOptions,
       selected,
+      feedback,
       siren: { active: sirenActive, secondsUntilWave },
     };
   }
@@ -163,9 +282,22 @@ export function createPlayingScene(opts: PlayingSceneOptions = {}): Scene {
       occupantByFloor.clear();
       for (const r of ctx.content.economy.roster) occupantByFloor.set(r.floor, r);
       emitIntent = (e): void => ctx.events.emit('residentIntent', e);
+      // Watch the engine's announcement of an APPLIED buy/beg, so a confirm can tell success (a result
+      // dialog) from a rejection (the engine stays silent). Cleared + re-armed each run.
+      txnOffs.forEach((off) => off());
+      txnOffs.length = 0;
+      txnOffs.push(
+        ctx.events.on('serviceBought', (p) => {
+          pendingTxn = { kind: 'service', cost: p.cost };
+        }),
+        ctx.events.on('favorBegged', () => {
+          pendingTxn = { kind: 'favor' };
+        }),
+      );
       mode = 'shooting';
       floor = TOP_FLOOR;
       selected = 0;
+      feedback = null;
       opts.audio?.setScene('Playing');
       opts.overlay?.setVisible(true);
       opts.view?.setVisible(true);
@@ -232,6 +364,8 @@ export function createPlayingScene(opts: PlayingSceneOptions = {}): Scene {
     exit(): void {
       engine?.dispose();
       engine = null;
+      txnOffs.forEach((off) => off());
+      txnOffs.length = 0;
       opts.audio?.setScene('MainMenu');
       opts.overlay?.setVisible(false);
       opts.view?.setVisible(false);

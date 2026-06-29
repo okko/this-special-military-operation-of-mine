@@ -13,7 +13,7 @@ import { PALETTE } from '../render/palette';
 import { METER_DISPLAY_ORDER } from './hud/theme';
 import type { Content } from '../content/loader';
 import type { GameState } from '../state/game-state';
-import type { PlayingViewState } from '../state/playing-view';
+import type { PlayingViewState, FeedbackTone } from '../state/playing-view';
 import type { MeterKey } from '../types/meter-key';
 
 export interface GameOverlay {
@@ -23,6 +23,42 @@ export interface GameOverlay {
 }
 
 const METER_EMOJI: Record<MeterKey, string> = { sleep: '😴', hunger: '🍞', thirst: '💧', vice: '🚬', poo: '💩' };
+
+const TONE_COLOR: Record<FeedbackTone, string> = {
+  cost: PALETTE.domeGold,
+  good: PALETTE.meterGood,
+  bad: PALETTE.meterCrit,
+  neutral: PALETTE.cream,
+};
+
+// Quick CSS keyframes for the interactions: the transaction-result dialog pops in / fades out on its own
+// (decoupled from the sim clock, so it still animates while the pause-on-visit accessibility option holds
+// the engine), each result line slides in with a tiny stagger, and the rubles counter flashes on a spend.
+const OVERLAY_CSS = `
+@keyframes ggo-pop {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.9); }
+  9%   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.04); }
+  16%  { transform: translateX(-50%) translateY(0) scale(1); }
+  78%  { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.98); }
+}
+@keyframes ggo-rowin {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes ggo-spend {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.28); color: ${PALETTE.meterCrit}; }
+  100% { transform: scale(1); }
+}`;
+
+function injectOverlayCss(): void {
+  if (typeof document === 'undefined' || document.getElementById('ggo-css')) return;
+  const style = document.createElement('style');
+  style.id = 'ggo-css';
+  style.textContent = OVERLAY_CSS;
+  document.head.appendChild(style);
+}
 
 function el(tag: string, style: Partial<CSSStyleDeclaration>, text?: string): HTMLElement {
   const node = document.createElement(tag);
@@ -126,7 +162,38 @@ export function createGameOverlay(host: HTMLElement, content: Content): GameOver
   panel.appendChild(panelList);
   root.appendChild(panel);
 
+  // ---- Transaction-result dialog (above the resident panel) ---------------------------------
+  // A card in the same idiom as the resident panel that pops up when the player buys/begs, showing the
+  // rubles spent and what the option produced (meter relief / side effects) — or why it was refused.
+  injectOverlayCss();
+  const fbCard = el('div', {
+    position: 'absolute',
+    top: '18%',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    minWidth: '34vh',
+    maxWidth: '60vh',
+    background: 'rgba(26,28,44,0.94)',
+    border: `2px solid ${PALETTE.panelLite}`,
+    borderRadius: '6px',
+    padding: '1.4vh 2vh',
+    display: 'none',
+    textAlign: 'left',
+  });
+  const fbTitle = el('div', { fontSize: '2.4vh', fontWeight: '700', color: PALETTE.domeGold }, '');
+  const fbWho = el('div', { fontSize: '1.6vh', opacity: '0.75', marginBottom: '0.8vh' }, '');
+  const fbLines = el('div', { display: 'grid', gap: '0.4vh' });
+  fbCard.appendChild(fbTitle);
+  fbCard.appendChild(fbWho);
+  fbCard.appendChild(fbLines);
+  root.appendChild(fbCard);
+
   host.appendChild(root);
+
+  // Replay-tracking for the one-shot animations (see updateFeedback / the rubles pulse).
+  let lastFeedbackNonce = -1;
+  let lastRubles = 0;
+  let justShown = true;
 
   function update(gs: GameState, vs: PlayingViewState): void {
     // Meters.
@@ -142,8 +209,16 @@ export function createGameOverlay(host: HTMLElement, content: Content): GameOver
     scoreText.textContent = fmtScore(gs.scoring.score);
     comboText.textContent = `×${gs.scoring.multiplier}`;
 
-    // Rubles + debt.
-    rublesText.textContent = `₽ ${gs.economy.rubles}`;
+    // Rubles + debt. Flash the counter the moment a purchase spends some (a quick "money just left" cue).
+    const rubles = gs.economy.rubles;
+    rublesText.textContent = `₽ ${rubles}`;
+    if (justShown) justShown = false; // first frame of a run: adopt the balance without a spurious flash
+    else if (rubles < lastRubles) {
+      rublesText.style.animation = 'none';
+      void rublesText.offsetWidth; // reflow so the animation restarts on a repeat spend
+      rublesText.style.animation = 'ggo-spend 0.5s ease-out';
+    }
+    lastRubles = rubles;
     debtText.textContent = gs.economy.debt > 0 ? `DEBT ₽-${gs.economy.debt}` : '';
 
     // City integrity.
@@ -183,6 +258,44 @@ export function createGameOverlay(host: HTMLElement, content: Content): GameOver
       hint.textContent = 'E enter building · ←/→ aim · SPACE/tap fire';
       panel.style.display = 'none';
     }
+
+    updateFeedback(vs);
+  }
+
+  // Show the result dialog only while inside, and (re)play its pop animation each time a NEW result lands
+  // (tracked by `nonce`, so two identical buys still animate). When there's nothing to show, hide it.
+  function updateFeedback(vs: PlayingViewState): void {
+    const fb = vs.feedback;
+    if (vs.mode !== 'interior' || !fb) {
+      fbCard.style.display = 'none';
+      lastFeedbackNonce = fb ? fb.nonce : -1;
+      return;
+    }
+    if (fb.nonce === lastFeedbackNonce) return; // already showing this result — let it finish its animation
+    lastFeedbackNonce = fb.nonce;
+
+    const accent = fb.ok ? (fb.kind === 'favor' ? PALETTE.domeGold : PALETTE.meterGood) : PALETTE.meterCrit;
+    fbCard.style.borderColor = accent;
+    fbTitle.style.color = accent;
+    fbTitle.textContent = `${fb.ok ? (fb.kind === 'favor' ? '🤲 ' : '✅ ') : '🚫 '}${fb.title}`;
+    fbWho.textContent = fb.who;
+    fbWho.style.display = fb.who ? 'block' : 'none';
+
+    fbLines.replaceChildren();
+    fb.lines.forEach((line, i) => {
+      const row = el(
+        'div',
+        { fontSize: '2vh', color: TONE_COLOR[line.tone], display: 'flex', gap: '0.8vh', alignItems: 'baseline', animation: `ggo-rowin 0.18s ease-out both`, animationDelay: `${0.08 + i * 0.05}s` },
+      );
+      row.appendChild(el('span', { width: '2.6vh', textAlign: 'center', flex: '0 0 auto' }, line.icon));
+      row.appendChild(el('span', {}, line.text));
+      fbLines.appendChild(row);
+    });
+
+    fbCard.style.display = 'block';
+    fbCard.style.animation = 'none';
+    void fbCard.offsetWidth; // reflow so the entrance restarts even on a back-to-back result
+    fbCard.style.animation = 'ggo-pop 1.9s ease-out forwards';
   }
 
   function renderOptions(vs: PlayingViewState): void {
@@ -213,6 +326,8 @@ export function createGameOverlay(host: HTMLElement, content: Content): GameOver
     update,
     setVisible(visible: boolean): void {
       root.style.display = visible ? 'block' : 'none';
+      // Start each run by adopting the opening balance silently (no spend flash on the 0-ruble reset).
+      if (visible) justShown = true;
     },
     dispose(): void {
       root.remove();
