@@ -247,21 +247,33 @@ export function createThreeView(canvas: HTMLCanvasElement, content: Content): Th
     towerGroup.add(rail);
   }
 
-  // ---- The gun + soldier ON the roof deck (storey 33, in front of the tower) ------------------
+  // ---- The gun + soldier ON the roof deck (storey 33) -----------------------------------------
+  // The whole post sits on the deck at the tower depth (TOWER_Z), centred on the firing column
+  // (ax(pivot.x) == towerX == 0). It fires OUT into the action plane (ACTION_Z) where the drones are;
+  // the projectile loop below reconciles tracers from this muzzle into that plane (see FIRE_BLEND).
+  const post = content.combat.gun.pivot; // arena-space firing column the sim spawns projectiles from
+  const BARREL_LEN = 2.4; // barrel length & muzzle reach (tip distance from the yaw pivot)
+  // Arena units over which a tracer sheds the muzzle offset and settles into the action plane. Spread
+  // across the whole engagement range (gun→arena-top is ~196) so the depth correction is a shallow,
+  // straight diagonal rather than a sharp z-step right off the barrel — the join lands off-screen.
+  const FIRE_BLEND = 220;
   const gunPivot = new THREE.Group();
-  gunPivot.position.set(ax(content.combat.gun.pivot.x), ROOF_DECK_Y + 0.9, ACTION_Z);
+  gunPivot.position.set(ax(post.x), ROOF_DECK_Y + 0.9, TOWER_Z);
   scene.add(gunPivot);
   const soldier = new THREE.Mesh(
     new THREE.CapsuleGeometry(0.55, 1.3, 4, 8),
     new THREE.MeshStandardMaterial({ color: col('uniform'), flatShading: true }),
   );
-  soldier.position.set(-0.7, 0.5, 0);
+  // Centre of the deck, feet on its top face. gunPivot is already at (towerX, ROOF_DECK_Y+0.9, TOWER_Z),
+  // so x/z offsets are 0; deck top is ROOF_DECK_Y+0.4 and the capsule half-height is 1.3/2+0.55=1.2, so
+  // y = (0.4+1.2)−0.9 = 0.7.
+  soldier.position.set(0, 0.7, 0);
   gunPivot.add(soldier);
   const barrel = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.18, 0.18, 2.4, 8),
+    new THREE.CylinderGeometry(0.18, 0.18, BARREL_LEN, 8),
     new THREE.MeshStandardMaterial({ color: col('gunmetal'), flatShading: true }),
   );
-  barrel.geometry.translate(0, 1.2, 0); // pivot at one end
+  barrel.geometry.translate(0, BARREL_LEN / 2, 0); // pivot at one end
   const barrelYaw = new THREE.Group();
   barrelYaw.add(barrel);
   gunPivot.add(barrelYaw);
@@ -390,7 +402,33 @@ export function createThreeView(canvas: HTMLCanvasElement, content: Content): Th
       if (m) m.visible = false;
     }
 
-    // Projectiles.
+    // Gun aim + muzzle flash. The barrel models +y; arena angle θ maps to world dir (cosθ, -sinθ)
+    // (arena y is down, world y is up), i.e. a z-rotation of -(θ + π/2) from the +y rest pose. The
+    // muzzle (barrel tip) is the visible source of fire; rotating +y·BARREL_LEN by aimZ gives its world
+    // point, which the tracer blend below leans on so shots leave the barrel rather than the deck.
+    gunPivot.visible = vs.mode === 'shooting';
+    const aimZ = -(c.aim.effectiveAngle + Math.PI / 2);
+    barrelYaw.rotation.z = aimZ;
+    const muzzleX = gunPivot.position.x - BARREL_LEN * Math.sin(aimZ);
+    const muzzleY = gunPivot.position.y + BARREL_LEN * Math.cos(aimZ);
+    const muzzleZ = gunPivot.position.z;
+    // Offset from where the sim spawns a shot (the firing column, mapped flat into the action plane) to
+    // the actual muzzle. Tracers carry this offset at spawn and shed it linearly over FIRE_BLEND, so a
+    // shot is a straight line from the barrel to its true path — never dipping back toward the post.
+    const fireOffX = muzzleX - ax(post.x);
+    const fireOffY = muzzleY - ay(post.y);
+    const fireOffZ = muzzleZ - (ACTION_Z + 0.2);
+    if (c.gun.firing && !c.gun.overheated && !c.gun.jammed) {
+      muzzleTimer = 0.05;
+      muzzle.position.set(0, BARREL_LEN, 0);
+    }
+    muzzleTimer = Math.max(0, muzzleTimer - dt);
+    muzzle.visible = muzzleTimer > 0;
+
+    // Projectiles. The sim flies them from the firing column (post) along the aim in arena 2D. The gun
+    // stands on the roof at TOWER_Z while the drones fly in the ACTION_Z plane, so each tracer keeps the
+    // muzzle offset at spawn and sheds it linearly over the first FIRE_BLEND arena units of travel: it
+    // leaves the barrel as a straight shot, then settles onto its true action-plane path where it hits.
     for (let i = 0; i < c.projectiles.length; i++) {
       let m = projPool[i];
       if (!m) {
@@ -401,24 +439,13 @@ export function createThreeView(canvas: HTMLCanvasElement, content: Content): Th
       const p = c.projectiles[i];
       if (!p) continue;
       m.visible = true;
-      m.position.set(ax(p.pos.x), ay(p.pos.y), ACTION_Z + 0.2);
+      const k = 1 - Math.min(1, Math.hypot(p.pos.x - post.x, p.pos.y - post.y) / FIRE_BLEND);
+      m.position.set(ax(p.pos.x) + fireOffX * k, ay(p.pos.y) + fireOffY * k, ACTION_Z + 0.2 + fireOffZ * k);
     }
     for (let i = c.projectiles.length; i < projPool.length; i++) {
       const m = projPool[i];
       if (m) m.visible = false;
     }
-
-    // Gun aim + muzzle flash. The barrel models +y; arena angle θ maps to world dir (cosθ, -sinθ)
-    // (arena y is down, world y is up), i.e. a z-rotation of -(θ + π/2) from the +y rest pose.
-    gunPivot.visible = vs.mode === 'shooting';
-    barrelYaw.rotation.z = -(c.aim.effectiveAngle + Math.PI / 2);
-    if (c.gun.firing && !c.gun.overheated && !c.gun.jammed) {
-      muzzleTimer = 0.05;
-      const reach = 2.4;
-      muzzle.position.set(0, reach, 0);
-    }
-    muzzleTimer = Math.max(0, muzzleTimer - dt);
-    muzzle.visible = muzzleTimer > 0;
 
     // Highlight the floor being visited.
     for (let f = 1; f <= 32; f++) {
